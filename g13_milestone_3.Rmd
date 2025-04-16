@@ -1,0 +1,813 @@
+---
+title: "g13_milestone_3"
+author: "Henry Burke, Beomseong Kim, Jack Vaughn, John Derr, Sanjay Nagarimadugu"
+output: rmdformats::downcute
+---
+
+# Full Interface
+- All original code below
+
+``` {r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+```
+
+
+---
+
+## Sanjay Original Code
+
+```{r}
+# Load required libraries
+library(tidyverse)
+library(leaflet)
+library(rnaturalearth)
+library(sf)
+library(viridis)
+library(scales)
+
+# Read and prepare data
+alz = read_csv("https://uwmadison.box.com/shared/static/a2a74zejbdt5ywk7pxsvsw06gsypi8to.csv") |>
+  mutate(
+    across(Country, str_replace, "USA", "United States"),
+    across(Country, str_replace, "UK", "United Kingdom")
+  ) |>
+  rename_at(vars(25), ~ "Alzheimer's Diagnosis")
+  # mutate(
+  #   `Alzheimer’s Diagnosis` = if_else(`Alzheimer's Diagnosis` == "Yes", 1, 0)
+  # )
+
+# Get country geographical data
+countries_geo = ne_countries(scale = "medium", returnclass = "sf")
+# Properly rename for sf objects
+countries_geo$Country = countries_geo$name
+countries_geo$Country[countries_geo$Country == "United States of America"] = "United States"
+
+# Compute metrics by country
+country_metrics = alz |>
+  group_by(Country) |>
+  summarize(
+    sample_size = n(),
+    alzheimers_rate = mean(`Alzheimer's Diagnosis`, na.rm = TRUE),
+    diabetes_rate = mean(Diabetes == "Yes", na.rm = TRUE),
+    avg_age = mean(Age, na.rm = TRUE)
+  ) |>
+  filter(sample_size >= 5, !is.na(diabetes_rate), !is.na(avg_age))
+
+# Get coordinates for the circles
+countries_centroid = st_centroid(countries_geo)
+countries_coords = as.data.frame(st_coordinates(countries_centroid))
+countries_coords$Country = countries_geo$Country
+
+# Join coordinates with metrics data
+circles_data = country_metrics |>
+  inner_join(countries_coords, by = "Country")
+
+# Join with geographical data for polygons
+map_data = countries_geo |>
+  inner_join(country_metrics, by = "Country")
+
+# Create color palettes
+diabetes_palette = colorNumeric(palette = "Reds", domain = range(country_metrics$diabetes_rate))
+age_palette = colorNumeric(palette = "YlOrBr", domain = range(country_metrics$avg_age))
+
+# Create the combined map directly without creating intermediate maps
+combined_map <- leaflet() |>
+  addTiles() |>
+  setView(lng = 0, lat = 20, zoom = 2) |>
+  # Add the base layers 
+  addPolygons(
+    data = map_data,
+    fillColor = ~diabetes_palette(diabetes_rate),
+    fillOpacity = 0.7,
+    weight = 1,
+    color = "#333333",
+    highlightOptions = highlightOptions(weight = 2, color = "#666666"),
+    label = ~paste0(Country, ": Diabetes Rate = ", percent(diabetes_rate)),
+    popup = ~paste0(
+      "<strong>", Country, "</strong><br>",
+      "Diabetes Rate: ", percent(diabetes_rate), "<br>",
+      "Average Age: ", round(avg_age, 1), " years<br>",
+      "Alzheimer's Rate: ", percent(alzheimers_rate), "<br>",
+      "Sample Size: ", sample_size
+    ),
+    group = "Diabetes Rate"
+  ) |>
+  addPolygons(
+    data = map_data,
+    fillColor = ~age_palette(avg_age),
+    fillOpacity = 0.7,
+    weight = 1,
+    color = "#333333",
+    highlightOptions = highlightOptions(weight = 2, color = "#666666"),
+    label = ~paste0(Country, ": Average Age = ", round(avg_age, 1), " years"),
+    popup = ~paste0(
+      "<strong>", Country, "</strong><br>",
+      "Average Age: ", round(avg_age, 1), " years<br>",
+      "Diabetes Rate: ", percent(diabetes_rate), "<br>",
+      "Alzheimer's Rate: ", percent(alzheimers_rate), "<br>",
+      "Sample Size: ", sample_size
+    ),
+    group = "Average Age"
+  ) |>
+  # Add circle markers for Alzheimer's rates on both layers
+  addCircleMarkers(
+    data = circles_data,
+    lng = ~X,
+    lat = ~Y,
+    radius = ~sqrt(alzheimers_rate) * 15,
+    stroke = TRUE,
+    color = "black",
+    weight = 1,
+    fillColor = "purple",
+    fillOpacity = 0.8,
+    popup = ~paste0(
+      "<strong>", Country, "</strong><br>",
+      "Alzheimer's Rate: ", percent(alzheimers_rate)
+    ),
+    group = "Diabetes Rate"
+  ) |>
+  addCircleMarkers(
+    data = circles_data,
+    lng = ~X,
+    lat = ~Y,
+    radius = ~sqrt(alzheimers_rate) * 15,
+    stroke = TRUE,
+    color = "black",
+    weight = 1,
+    fillColor = "purple",
+    fillOpacity = 0.8,
+    popup = ~paste0(
+      "<strong>", Country, "</strong><br>",
+      "Alzheimer's Rate: ", percent(alzheimers_rate)
+    ),
+    group = "Average Age"
+  ) |>
+  # Add appropriate legends for each layer
+  addLegend(
+    position = "bottomright",
+    pal = diabetes_palette,
+    values = seq(min(country_metrics$diabetes_rate), max(country_metrics$diabetes_rate), length.out = 5),
+    title = "Diabetes Rate",
+    labFormat = labelFormat(suffix = "%", transform = function(x) x * 100),
+    opacity = 0.7,
+    group = "Diabetes Rate"
+  ) |>
+  addLegend(
+    position = "bottomright",
+    pal = age_palette,
+    values = seq(min(country_metrics$avg_age), max(country_metrics$avg_age), length.out = 5),
+    title = "Average Age (years)",
+    opacity = 0.7,
+    group = "Average Age"
+  ) |>
+  # Add legend for Alzheimer's circles (shown with both layers)
+  addLegend(
+    position = "bottomleft",
+    colors = "purple",
+    labels = "Alzheimer's Rate (circle size)",
+    opacity = 0.8,
+    group = c("Diabetes Rate", "Average Age")
+  ) |>
+  # Add layer control
+  addLayersControl(
+    baseGroups = c("Diabetes Rate", "Average Age"),
+    options = layersControlOptions(collapsed = FALSE)
+  )
+
+combined_map
+```
+
+---
+
+## Henry Original Code
+
+``` {r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(shiny)
+library(leaflet)
+library(rnaturalearth)
+library(sf)
+
+alz = read_csv("https://uwmadison.box.com/shared/static/a2a74zejbdt5ywk7pxsvsw06gsypi8to.csv") |>
+  mutate(
+    across(Country, str_replace, "USA", "United States"),
+    across(Country, str_replace, "UK", "United Kingdom")) |>
+  rename_at(vars(25), ~ "Alzheimer's Diagnosis")
+  
+
+happy = read_csv("https://uwmadison.box.com/shared/static/z79r9iafg3tzvm6cxagvft9auvcu868t.csv") |>
+  rename(Country = `Country name`)
+
+lat_long = read_csv("https://uwmadison.box.com/shared/static/b9a1uvwrho690zvwc2wfzrwlwx0jtehp.csv") |>
+  select(id, name, latitude, longitude) |>
+  rename(Country = name)
+
+temp = left_join(alz, happy, by="Country")
+
+df = left_join(temp, lat_long, by="Country")
+```
+
+```{r}
+# for addPolygons
+df_countries = df |>
+  filter(`Alzheimer's Diagnosis` == "Yes") |>
+  group_by(Country, `Ladder score`) |>
+  summarize(yes_count = n())
+  
+# for addCircles
+df_points = df |>
+  group_by(Country, latitude, longitude) |>
+  summarize(tot_count = n()) |>
+  left_join(df_countries, by="Country")
+
+countries = as.data.frame(ne_countries(scale = "medium", returnclass = "sf")) |>
+  rename(Country = name) |>
+  mutate(across(Country, str_replace, "United States of America", "United States"))
+
+df_countries_with_polygons = st_as_sf(
+  full_join(df_countries, countries, by="Country") |>
+  filter(!is.na(count))
+  )
+
+palette = colorNumeric(palette = "Blues", domain = df_countries_with_polygons$Count)
+
+leaflet() |>
+  addTiles() |>
+  addPolygons(
+    data = df_countries_with_polygons,
+    fillColor = ~palette(`Ladder score`),
+    fillOpacity = 0.7,
+    color = "black",
+    weight = 1 # ,
+    # popup = ~paste(Country, ": ", `Ladder score`, " happiness index")
+  ) |>
+  addCircles(
+    data = df_points,
+    lng = ~longitude,
+    lat = ~latitude,
+    radius = ~sqrt(yes_count) * 5000,
+    color = "red",
+    fillOpacity = 0.5,
+    popup = ~paste(Country, ": ", yes_count, " positive diagnoses of ", tot_count, " total people", "<br>",
+                   "Ratio: ", round(yes_count/tot_count, digits=2))
+  ) |>
+  addLegend(
+    pal = palette,
+    values = df_countries_with_polygons$`Ladder score`,
+    title = "World Happiness Index",
+    position = "bottomright"
+  ) |>
+  setView(lng = 0, lat = 0, zoom = 2)
+```
+
+---
+
+## John Original Code
+
+```{r}
+# Load required libraries
+library(shiny)
+library(tidyverse)
+library(DT)
+library(plotly)
+
+alzheimer <- read_csv("https://uwmadison.box.com/shared/static/a2a74zejbdt5ywk7pxsvsw06gsypi8to.csv")
+
+
+# UI for the application
+ui <- fluidPage(
+  # Application title
+  titlePanel("Alzheimer's Risk Factors Explorer"),
+  
+  # Sidebar with controls
+  sidebarLayout(
+    sidebarPanel(
+      # Tab selection
+      tabsetPanel(
+        id = "sidebar_tabs",
+        tabPanel("Correlation Explorer",
+                selectInput("xvar", "X Variable:", "", selected = "Age"),
+                selectInput("yvar", "Y Variable:", "", selected = "Cognitive Test Score"),
+                radioButtons("summary_metric", "Summary Metric:", 
+                             choices = c("Alzheimer's Percentage" = "alz_pct", 
+                                         "Average Age" = "avg_age",
+                                         "Count" = "count"),
+                             selected = "alz_pct"),
+                sliderInput("bin_count", "Number of Groups:",
+                            min = 5, max = 20, value = 10),
+                checkboxInput("show_other", "Show 'Other' Category for Country", FALSE,
+                              width = "100%")
+        ),
+        tabPanel("Filters",
+                 sliderInput("age_range", "Age Range:", 
+                             min = 20, max = 100, value = c(20, 100)),
+                 selectInput("gender", "Gender:", 
+                             c("All", "Male", "Female")),
+                 selectInput("diagnosis", "Alzheimer's Diagnosis:", 
+                             c("All", "Yes", "No"))
+        )
+      ),
+      
+      # Action button for filtering
+      actionButton("apply_filters", "Apply Filters", 
+                   class = "btn-primary", 
+                   style = "margin-top: 10px; width: 100%")
+    ),
+    
+    # Main panel with visualization outputs
+    mainPanel(
+      tabsetPanel(
+        tabPanel("Visualizations", 
+                 plotlyOutput("main_plot", height = "500px"),
+                 htmlOutput("plot_explanation")),
+        tabPanel("Data Summary", 
+                 verbatimTextOutput("data_summary"),
+                 tags$div(
+                   tags$h4("What am I looking at?"),
+                   tags$p("This is a statistical summary of the dataset, showing counts, averages, and other metrics for each variable."),
+                   tags$p("It helps you understand the characteristics of people in this dataset.")
+                 )),
+        tabPanel("Data Table", 
+                 DTOutput("data_table"))
+      )
+    )
+  )
+)
+
+# Server logic
+server <- function(input, output, session) {
+  
+  # Read the data
+  data <- reactive({
+    alzheimer
+  })
+  
+  
+  # Update the correlation dropdowns with actual column names when data is loaded
+  observe({
+    cols <- names(data())
+    updateSelectInput(session, "xvar", choices = cols)
+    updateSelectInput(session, "yvar", choices = cols)
+  })
+  
+  observe({
+    needs_other_option <- input$xvar == "Country" || input$yvar == "Country"
+    shinyjs::toggleState(id = "show_other", condition = needs_other_option)
+    
+    # Update the checkbox label based on which variables are selected
+    if (input$xvar == "Country" && input$yvar == "Country") {
+      updateCheckboxInput(session, "show_other", 
+                          label = "Show 'Other' Category for Countries")
+    } else if (input$xvar == "Country") {
+      updateCheckboxInput(session, "show_other", 
+                          label = "Show 'Other' Category for Country (X-axis)")
+    } else if (input$yvar == "Country") {
+      updateCheckboxInput(session, "show_other", 
+                          label = "Show 'Other' Category for Country (Y-axis)")
+    } else {
+      updateCheckboxInput(session, "show_other", 
+                          label = "Show 'Other' Category for Country")
+    }
+  })
+  
+  # Apply filters to the data
+  filtered_data <- eventReactive(input$apply_filters, {
+    df <- data()
+    
+    # Apply age filter
+    df <- df %>% filter(Age >= input$age_range[1] & Age <= input$age_range[2])
+    
+    # Apply gender filter if not "All"
+    if(input$gender != "All") {
+      df <- df %>% filter(Gender == input$gender)
+    }
+    
+    # Apply diagnosis filter if not "All"
+    if(input$diagnosis != "All") {
+      df <- df %>% filter(`A` == input$diagnosis)
+    }
+    
+    df
+  }, ignoreNULL = FALSE)
+  
+  observe({
+      output$main_plot <- renderPlotly({
+        df <- filtered_data()
+        
+        # Helper function to create bins for numeric variables
+        create_bins <- function(var, var_name, n_bins) {
+          if(is.numeric(var)) {
+            # Create bins for numeric variables
+            breaks <- quantile(var, probs = seq(0, 1, length.out = n_bins + 1), na.rm = TRUE)
+            # Ensure unique breaks (in case of ties in quantiles)
+            breaks <- unique(breaks)
+            if(length(breaks) <= 1) { # Handle cases with a single unique value
+              return(rep("Single Value", length(var)))
+            }
+            # Use cut to bin the values
+            return(cut(var, breaks = breaks, include.lowest = TRUE, dig.lab = 3))
+          } else {
+            # For categorical variables, handle country specially
+            if(var_name == "Country") {
+              # Count occurrences of each country
+              country_counts <- table(var)
+              # Sort countries by frequency
+              top_countries <- names(sort(country_counts, decreasing = TRUE)[1:n_bins])
+              
+              # Create a factor with "Other" level for less common countries
+              if(!input$show_other) {
+                # Filter out the "Other" category
+                return(factor(ifelse(var %in% top_countries, as.character(var), NA)))
+              } else {
+                return(factor(ifelse(var %in% top_countries, as.character(var), "Other")))
+              }
+            } else {
+              # For other categorical variables, limit to the most common categories if there are too many
+              if(length(unique(var)) > n_bins) {
+                top_cats <- names(sort(table(var), decreasing = TRUE)[1:n_bins])
+                var_factor <- factor(ifelse(var %in% top_cats, as.character(var), "Other"))
+                return(var_factor)
+              } else {
+                return(factor(var))
+              }
+            }
+          }
+        }
+        
+        # Create bins for x and y variables
+        x_bins <- create_bins(df[[input$xvar]], input$xvar, input$bin_count)
+        y_bins <- create_bins(df[[input$yvar]], input$yvar, input$bin_count)
+        
+        # Create a data frame with the binned variables
+        binned_df <- df %>%
+          mutate(
+            x_binned = x_bins,
+            y_binned = y_bins
+          ) %>%
+          drop_na(x_binned, y_binned)
+        
+        
+        # Summarize the data based on the bins
+        summary_df <- binned_df %>%
+          group_by(x_binned, y_binned) %>%
+          summarise(
+            count = n(),
+            alz_count = sum(`Alzheimer’s Diagnosis` == "Yes"),
+            alz_pct = mean(`Alzheimer’s Diagnosis` == "Yes") * 100,
+            avg_age = mean(Age, na.rm = TRUE),
+            .groups = "drop"
+          )
+        
+        # Determine title and color scale based on selected summary metric
+        if(input$summary_metric == "alz_pct") {
+          title <- paste("Alzheimer's Percentage by", input$xvar, "and", input$yvar)
+          color_scale <- scale_fill_gradient(
+            low = "#69b3a2", high = "#e15759",
+            name = "Alzheimer's %"
+          )
+          hover_text <- with(summary_df, 
+                             paste0("Group: ", x_binned, " & ", y_binned,
+                                    "<br>Alzheimer's: ", round(alz_pct, 1), "%",
+                                    "<br>Count: ", count,
+                                    "<br>Average Age: ", round(avg_age, 1)))
+        } else if(input$summary_metric == "avg_age") {
+          title <- paste("Average Age by", input$xvar, "and", input$yvar)
+          color_scale <- scale_fill_viridis_c(
+            option = "viridis",
+            name = "Average Age"
+          )
+          hover_text <- with(summary_df, 
+                             paste0("Group: ", x_binned, " & ", y_binned,
+                                    "<br>Average Age: ", round(avg_age, 1),
+                                    "<br>Alzheimer's: ", round(alz_pct, 1), "%",
+                                    "<br>Count: ", count))
+        } else { # count
+          title <- paste("Number of People by", input$xvar, "and", input$yvar)
+          color_scale <- scale_fill_viridis_c(
+            option = "plasma",
+            name = "Count",
+            trans = "log10"
+          )
+          hover_text <- with(summary_df, 
+                             paste0("Group: ", x_binned, " & ", y_binned,
+                                    "<br>Count: ", count,
+                                    "<br>Alzheimer's: ", round(alz_pct, 1), "%",
+                                    "<br>Average Age: ", round(avg_age, 1)))
+        }
+        
+        # Size of points based on count (log scale to prevent huge differences)
+        summary_df$point_size <- sqrt(summary_df$count) * 0.5
+        
+        # Create the plot with ggplot2
+        p <- ggplot(summary_df, aes(
+          x = x_binned, 
+          y = y_binned,
+          fill = get(input$summary_metric),
+          size = point_size,
+          text = hover_text
+        )) +
+          geom_point(shape = 21, alpha = 0.9) +
+          labs(title = title,
+               x = input$xvar,
+               y = input$yvar) +
+          theme_minimal() +
+          theme(
+            axis.text.x = element_text(angle = 45, hjust = 1),
+            legend.position = "right"
+          ) +
+          color_scale +
+          guides(size = "none") # Hide the size legend
+        
+        # Convert to plotly with custom hover
+        ggplotly(p, tooltip = "text") %>%
+          layout(margin = list(b = 100)) # Add margin for rotated x labels
+      })
+      
+      # Update the explanation for correlation plot
+      output$plot_explanation <- renderUI({
+        explanation_text <- if (input$summary_metric == "alz_pct") {
+          "the percentage with Alzheimer's in that group."
+        } else if (input$summary_metric == "avg_age") {
+          "the average age of people in that group."
+        } else {
+          "how many people are in that group."
+        }
+        
+        tags$div(
+          tags$h4("What does this chart show?"),
+          tags$p("This chart groups people with similar characteristics and shows patterns across groups."),
+          tags$p("Each bubble represents a group of people with similar values for the two selected variables."),
+          tags$p("The size of each bubble shows how many people are in that group."),
+          tags$p("The color shows ", explanation_text),
+          tags$p("Hover over bubbles to see detailed information.")
+        )
+      })
+  })
+  
+  # Explanatory text for plots
+  output$plot_explanation <- renderUI({
+      tags$div(
+        tags$h4("What does this chart show?"),
+        tags$p("This scatter plot shows the relationship between two variables you've selected."),
+        tags$p("Each dot represents a person in the dataset. If there's a pattern (like dots forming a line), it suggests the variables might be related.")
+      )
+  })
+  
+  # Data summary output
+  output$data_summary <- renderPrint({
+    summary(filtered_data())
+  })
+  
+  # Data table output
+  output$data_table <- renderDT({
+    datatable(filtered_data(), 
+              options = list(scrollX = TRUE, 
+                             pageLength = 10,
+                             lengthMenu = c(5, 10, 15, 20)),
+              filter = "top",
+              rownames = FALSE) %>%
+      formatStyle(
+        'Alzheimer’s Diagnosis',
+        backgroundColor = styleEqual(
+          c('Yes', 'No'), 
+          c('#fadadd', '#d3f8d3')
+        )
+      )
+  })
+}
+
+# Run the application
+shinyApp(ui = ui, server = server)
+```
+
+---
+
+## Jack Original Code
+
+```{r}
+library(shiny)
+library(ggplot2)
+library(reshape2)
+library(dplyr)
+
+alzheimers <- read.csv("https://uwmadison.box.com/shared/static/a2a74zejbdt5ywk7pxsvsw06gsypi8to.csv")
+
+country_choices <- c("All Countries", sort(unique(alzheimers$Country)))
+
+ui <- fluidPage(
+  titlePanel("Alzheimer's Disease Heatmap by Gender and Selected Health Conditions"),
+  sidebarLayout(
+    sidebarPanel(
+      selectInput("country", "Select Country:", 
+                  choices = country_choices,
+                  selected = "All Countries")
+      ),
+    
+    mainPanel(
+      plotOutput("heatmap"),
+      br(),
+      textOutput("summary"),
+      br(),
+      tableOutput("data_table")
+    )
+  )
+)
+
+server <- function(input, output) {
+  filtered_data <- reactive({
+    if(input$country == "All Countries") {
+      data <- alzheimers
+    } else {
+      data <- alzheimers %>% filter(Country == input$country)
+    }
+    return(data)
+  })
+  
+  heatmap_data <- reactive({
+    alzheimer_cases <- filtered_data() %>% 
+      filter(Alzheimer.s.Diagnosis == "Yes")
+    if(nrow(alzheimer_cases) == 0) {
+      return(NULL)
+    }
+
+    diabetes_gender <- table(alzheimer_cases$Gender, alzheimer_cases$Diabetes)
+    diabetes_melted <- melt(diabetes_gender)
+    colnames(diabetes_melted) <- c("Gender", "Condition", "Count")
+    diabetes_melted$HealthFactor <- "Diabetes"
+    
+    hypertension_gender <- table(alzheimer_cases$Gender, alzheimer_cases$Hypertension)
+    hypertension_melted <- melt(hypertension_gender)
+    colnames(hypertension_melted) <- c("Gender", "Condition", "Count")
+    hypertension_melted$HealthFactor <- "Hypertension"
+    
+    stress_gender <- table(alzheimer_cases$Gender, alzheimer_cases$Stress.Levels)
+    stress_melted <- melt(stress_gender)
+    colnames(stress_melted) <- c("Gender", "Condition", "Count")
+    stress_melted$HealthFactor <- "Stress.Levels"
+    
+    heatmap_data <- rbind(diabetes_melted, hypertension_melted, stress_melted)
+    
+    heatmap_data$HealthFactor <- factor(heatmap_data$HealthFactor, 
+                                      levels = c("Diabetes", "Hypertension", "Stress.Levels"))
+    
+    return(heatmap_data)
+  })
+  
+  output$heatmap <- renderPlot({
+    data <- heatmap_data()
+    if(is.null(data) || nrow(data) == 0) {
+      ggplot() + 
+        annotate("text", x = 0.5, y = 0.5, label = "No Alzheimer's cases found for the selected country") +
+        theme_void() +
+        xlim(0, 1) + 
+        ylim(0, 1)
+    } else {
+      ggplot(data, aes(x = Gender, y = paste(HealthFactor, "-", Condition), fill = Count)) +
+        geom_tile(color = "white") +
+        geom_text(aes(label = Count), color = ifelse(data$Count > max(data$Count)/2, "white", "black"), size = 4) +
+        scale_fill_gradient(low = "white", high = "steelblue", 
+                            name = "Alzheimer's\nCases") +
+        labs(title = paste("Alzheimer's Cases by Gender and Health Conditions", 
+                           if(input$country != "All Countries") paste("in", input$country) else ""),
+             x = "Gender", 
+             y = "") +
+        theme_minimal() +
+        theme(axis.text.y = element_text(size = 10),
+              plot.title = element_text(hjust = 0.5, face = "bold"))
+    }
+  })
+  
+  output$summary <- renderText({
+    alzheimer_count <- sum(filtered_data()$Alzheimer.s.Diagnosis == "Yes")
+    total_count <- nrow(filtered_data())
+    
+    paste("Summary: There are", alzheimer_count, "Alzheimer's cases out of", 
+          total_count, "surveyed individuals", 
+          if(input$country != "All Countries") paste("in", input$country) else "across all countries", 
+          "(", round(alzheimer_count/total_count*100, 1), "%).")
+  })
+  
+  output$data_table <- renderTable({
+    if(input$country == "All Countries") {
+      alzheimers %>% 
+        group_by(Country) %>%
+        summarize(
+          Total = n(),
+          `Alzheimer's Cases` = sum(Alzheimer.s.Diagnosis == "Yes"),
+          `Percentage (%)` = round(sum(Alzheimer.s.Diagnosis == "Yes") / n() * 100, 1)
+        ) %>%
+        arrange(desc(`Alzheimer's Cases`))
+    } else {
+      ad_cases <- filtered_data() %>% filter(Alzheimer.s.Diagnosis == "Yes")
+      if(nrow(ad_cases) == 0) {
+        data.frame(Message = paste("No Alzheimer's cases found in", input$country))
+      } else {
+        ad_cases %>%
+          select(Gender, Diabetes, Hypertension, Stress.Levels)
+      }
+    }
+  })
+}
+
+shinyApp(ui = ui, server = server)
+```
+
+---
+
+## Beomseong Original Code
+
+```{r}
+library(shiny)
+library(dplyr)
+library(plotly)
+library(readr)
+
+alz = read_csv("https://uwmadison.box.com/shared/static/a2a74zejbdt5ywk7pxsvsw06gsypi8to.csv")
+```
+
+```{r}
+ui = fluidPage(
+  titlePanel("Comparative Distribution Analysis of Alzheimer’s Factors"),
+  sidebarLayout(
+    sidebarPanel(
+    sliderInput(inputId = "ageRange", label = "Age Range:", 
+                min = floor(min(alz$Age, na.rm = TRUE)), 
+                max = ceiling(max(alz$Age, na.rm = TRUE)), 
+                value = c(50, 90)),
+      selectInput(inputId  = "genderFilter",
+                  label = "Gender:",
+                  choices = c("All", unique(alz$Gender)),
+                  selected = "All"),
+      selectInput(inputId  = "countryFilter",
+                  label = "Country:",
+                  choices  = c("All", unique(alz$Country)),
+                  selected = "All"),
+      selectInput(inputId = "varChoice",
+                  label = "Variable to Analyze:",
+                  choices = c("Physical Activity Level",
+                              "Smoking Status",
+                              "Alcohol Consumption",
+                              "Diabetes",
+                              "Hypertension",
+                              "Cholesterol Level",
+                              "Family History of Alzheimer’s",
+                              "Genetic Risk Factor (APOE-ε4 allele)",
+                              "Stress Levels"),
+        selected = "Physical Activity Level")),
+    mainPanel(tabsetPanel(
+      tabPanel("Alzheimer's Diagnosis Overview",
+               plotlyOutput("pieDiagnosisPlot"))))))
+```
+
+```{r}
+server = function(input, output, session) {
+  # Return filtered data based on age, gender, and country filters
+  filtered_data = reactive({
+    df = alz
+    df = df %>%
+      filter(Age >= input$ageRange[1], Age <= input$ageRange[2])
+    if (input$genderFilter != "All") {
+      df = df %>% filter(Gender == input$genderFilter)} 
+    if (input$countryFilter != "All") {
+      df = df %>% filter(Country == input$countryFilter)}
+    return(df)})
+  
+  # Render side-by-side pie charts for AD diagnosis (Yes and No)
+  output$pieDiagnosisPlot = renderPlotly({
+    var = input$varChoice
+    df_filtered = filtered_data()
+    
+    # AD = Yes
+    df_yes = df_filtered %>%
+      filter(`Alzheimer’s Diagnosis` == "Yes") %>%
+      group_by(.data[[var]]) %>%
+      summarize(count = n(), .groups = "drop") %>%
+      filter(!is.na(.data[[var]]))
+    
+    # AD = No
+    df_no = df_filtered %>%
+      filter(`Alzheimer’s Diagnosis` == "No") %>%
+      group_by(.data[[var]]) %>%
+      summarize(count = n(), .groups = "drop") %>%
+      filter(!is.na(.data[[var]]))
+    
+    plot_ly() %>%
+      add_pie(data = df_yes, labels = ~.data[[var]], values = ~count,
+              name = "AD = Yes", domain = list(x = c(0, 0.45), y = c(0, 1))) %>%
+      add_pie(data = df_no, labels = ~.data[[var]], values = ~count,
+              name = "AD = No", domain = list(x = c(0.55, 1), y = c(0, 1))) %>%
+      layout(title = paste("AD Diagnosis Pie Charts by", var), showlegend = TRUE, 
+             legend = list(orientation = "h"), template = "plotly_dark")
+  })
+}
+
+shinyApp(ui, server)
+```
+
+
+
