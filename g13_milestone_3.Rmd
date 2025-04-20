@@ -265,6 +265,76 @@ leaflet() |>
   setView(lng = 0, lat = 0, zoom = 2)
 ```
 
+## Henry Revised Code
+
+```{r, warning=FALSE, message=FALSE}
+# loading & cleaning data
+
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(shiny)
+library(plotly)
+
+alz = read_csv("https://uwmadison.box.com/shared/static/a2a74zejbdt5ywk7pxsvsw06gsypi8to.csv") |>
+  mutate(
+    across(Country, str_replace, "USA", "United States"),
+    across(Country, str_replace, "UK", "United Kingdom")) |>
+  rename_at(vars(25), ~ "Alzheimer's Diagnosis")
+  
+
+happy = read_csv("https://uwmadison.box.com/shared/static/z79r9iafg3tzvm6cxagvft9auvcu868t.csv") |>
+  rename(Country = `Country name`)
+
+alz_by_country = left_join(alz, happy, by="Country") |>
+  filter(`Alzheimer's Diagnosis` == "Yes") |>
+  group_by(Country, `Ladder score`) |>
+  summarize(yes_count = n())
+```
+
+```{r}
+# static scatter plot
+
+ggplot(alz_by_country) +
+  geom_point(
+    aes(x=`Ladder score`, y=yes_count), 
+    size = 2
+    ) +
+  labs(
+    title="World Happiness Index vs. Alzheimer's Diagnoses By Country",
+    x="World Happiness Index Score",
+    y="Number of Alzheimer's Diagnoses"
+  )
+```
+
+```{r}
+# dynamic scatter plot
+
+ui <- fluidPage(
+  plotlyOutput("plt", height = "600px")
+)
+
+server <- function(input, output, session) {
+  p <- ggplot(alz_by_country,
+              aes(x = `Ladder score`, y = yes_count,
+                  text = paste0("Country: ", Country,
+                                "<br>World Happiness Index: ", `Ladder score`,
+                                "<br>Number of Alzheimer's Diagnoses: ", yes_count))) +
+       geom_point(size = 2)
+  
+  output$plt <- renderPlotly({
+    ggplotly(p, tooltip = "text") %>%
+      layout(title = "World Happiness vs. Alzheimer's Diagnoses",
+             xaxis = list(title = "World Happiness Index Score"),
+             yaxis = list(title = "Number of Alzheimer's Diagnoses"))
+  })
+}
+
+shinyApp(ui, server)
+```
+
+
+
+
 ---
 
 ## John Original Code
