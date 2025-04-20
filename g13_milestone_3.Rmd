@@ -345,15 +345,84 @@ library(shiny)
 library(tidyverse)
 library(DT)
 library(plotly)
+library(shinyjs) # Added for toggleState
 
-alzheimer <- read_csv("https://uwmadison.box.com/shared/static/a2a74zejbdt5ywk7pxsvsw06gsypi8to.csv")
 
 
-# UI for the application
+# It's generally better practice to define helper functions outside the server function
+# if they don't rely on reactive values, or inside if they do but used in one place.
+# Placing it here for clarity.
+create_bins <- function(var, var_name, n_bins, show_other_opt) {
+  if(is.numeric(var)) {
+    # Create bins for numeric variables
+    breaks <- quantile(var, probs = seq(0, 1, length.out = n_bins + 1), na.rm = TRUE)
+    breaks <- unique(breaks) # Ensure unique breaks
+    if(length(breaks) <= 1) { # Handle cases with a single unique value or all NAs
+        # If only one break, maybe return the single value as a factor? Or a constant label.
+        # Returning a constant label might be safer for grouping.
+         return(factor(rep(paste0("Value: ", format(unique(na.omit(var))[1], digits=3)), length(var))))
+    }
+     # Adjust breaks if only two unique values resulted (min and max) to avoid single bin
+    if(length(breaks) == 2 && length(unique(na.omit(var))) > 1) {
+        breaks <- seq(min(var, na.rm=TRUE), max(var, na.rm=TRUE), length.out = n_bins + 1)
+        breaks <- unique(breaks) # Ensure uniqueness again
+         if(length(breaks) <= 1) { # Still problematic, fall back
+             return(factor(rep(paste0("Value: ", format(unique(na.omit(var))[1], digits=3)), length(var))))
+         }
+    }
+    return(cut(var, breaks = breaks, include.lowest = TRUE, dig.lab = 3))
+  } else {
+    # For categorical variables
+    
+    if (is.ordered(var)) {
+        return(factor(var, levels = levels(var), ordered = TRUE))
+    }
+    
+     var_factor <- factor(var) # Ensure it's a factor first
+     num_levels <- nlevels(var_factor)
+
+    if(var_name == "Country") {
+      country_counts <- sort(table(var_factor), decreasing = TRUE)
+       # Select top N bins, or fewer if not enough countries exist
+      top_n_actual <- min(n_bins, length(country_counts))
+      top_countries <- names(country_counts)[1:top_n_actual]
+
+      if (!show_other_opt && length(country_counts) > top_n_actual) {
+         # If 'Other' is hidden and there are more countries than bins,
+         # Keep only top N, set others to NA (will be dropped later)
+          var_factor <- factor(ifelse(var %in% top_countries, as.character(var), NA), levels=top_countries)
+      } else if (show_other_opt && length(country_counts) > top_n_actual) {
+         # If 'Other' is shown and there are more countries than bins, group remaining into 'Other'
+          var_factor <- factor(ifelse(var %in% top_countries, as.character(var), "Other"), levels=c(top_countries, "Other"))
+      } else {
+         # If fewer countries than bins, or 'Other' is hidden and exactly N countries, keep all as is
+          var_factor <- factor(var, levels = names(country_counts)) # Use existing levels
+      }
+      return(var_factor)
+
+    } else {
+      # For other categorical variables
+      if (num_levels > n_bins) {
+        category_counts <- sort(table(var_factor), decreasing = TRUE)
+        top_n_actual <- min(n_bins, length(category_counts))
+        top_cats <- names(category_counts)[1:top_n_actual]
+        # Group remaining into "Other" - assuming 'Other' is always acceptable for non-Country categoricals
+        var_factor <- factor(ifelse(var %in% top_cats, as.character(var), "Other"), levels = c(top_cats, "Other"))
+        return(var_factor)
+      } else {
+        # Fewer levels than bins, return as is
+        return(var_factor)
+      }
+    }
+  }
+}
+
+
 ui <- fluidPage(
+  useShinyjs(),
   # Application title
   titlePanel("Alzheimer's Risk Factors Explorer"),
-  
+
   # Sidebar with controls
   sidebarLayout(
     sidebarPanel(
@@ -361,49 +430,40 @@ ui <- fluidPage(
       tabsetPanel(
         id = "sidebar_tabs",
         tabPanel("Correlation Explorer",
-                selectInput("xvar", "X Variable:", "", selected = "Age"),
-                selectInput("yvar", "Y Variable:", "", selected = "Cognitive Test Score"),
-                radioButtons("summary_metric", "Summary Metric:", 
-                             choices = c("Alzheimer's Percentage" = "alz_pct", 
-                                         "Average Age" = "avg_age",
-                                         "Count" = "count"),
-                             selected = "alz_pct"),
-                sliderInput("bin_count", "Number of Groups:",
-                            min = 5, max = 20, value = 10),
-                checkboxInput("show_other", "Show 'Other' Category for Country", FALSE,
-                              width = "100%")
+                 selectInput("xvar", "X Variable:", choices = NULL), 
+                 selectInput("yvar", "Y Variable:", choices = NULL),
+                 radioButtons("summary_metric", "Summary Metric:",
+                              choices = c("Alzheimer's Percentage" = "alz_pct",
+                                          "Average Age" = "avg_age",
+                                          "Count" = "count"),
+                              selected = "alz_pct"),
+                 sliderInput("bin_count", "Number of Groups:",
+                             min = 2, max = 20, value = 10), # Min changed to 2 for safety
+                 checkboxInput("show_other", "Show 'Other' Category for Country", FALSE,
+                               width = "100%")
         ),
         tabPanel("Filters",
-                 sliderInput("age_range", "Age Range:", 
+                 sliderInput("age_range", "Age Range:",
                              min = 20, max = 100, value = c(20, 100)),
-                 selectInput("gender", "Gender:", 
+                 selectInput("gender", "Gender:",
                              c("All", "Male", "Female")),
-                 selectInput("diagnosis", "Alzheimer's Diagnosis:", 
+                 selectInput("diagnosis", "Alzheimer's Diagnosis:",
                              c("All", "Yes", "No"))
         )
       ),
-      
+
       # Action button for filtering
-      actionButton("apply_filters", "Apply Filters", 
-                   class = "btn-primary", 
+      actionButton("apply_filters", "Apply Filters",
+                   class = "btn-primary",
                    style = "margin-top: 10px; width: 100%")
     ),
-    
+
     # Main panel with visualization outputs
     mainPanel(
       tabsetPanel(
-        tabPanel("Visualizations", 
+        tabPanel("Visualizations",
                  plotlyOutput("main_plot", height = "500px"),
-                 htmlOutput("plot_explanation")),
-        tabPanel("Data Summary", 
-                 verbatimTextOutput("data_summary"),
-                 tags$div(
-                   tags$h4("What am I looking at?"),
-                   tags$p("This is a statistical summary of the dataset, showing counts, averages, and other metrics for each variable."),
-                   tags$p("It helps you understand the characteristics of people in this dataset.")
-                 )),
-        tabPanel("Data Table", 
-                 DTOutput("data_table"))
+                 htmlOutput("plot_explanation"))
       )
     )
   )
@@ -412,243 +472,287 @@ ui <- fluidPage(
 # Server logic
 server <- function(input, output, session) {
   
-  # Read the data
-  data <- reactive({
-    alzheimer
+  ordered_factor_definitions <- list(
+    # Group 1: Standard Low/Medium/High
+    list(
+      cols = c("Social Engagement Level", "Income Level", "Depression Level", "Air Pollution Exposure", "Stress Level", "Cholesterol Level", "Physical Activity Level"),
+      levels = c("Low", "Medium", "High")
+    ),
+    list(
+      cols = c("Sleep Quality"),
+      levels = c("Poor", "Average", "Good")
+    ),
+    list(
+      cols = c("Alcohol Consumption"),
+      levels = c("Never", "Occasionally", "Regularly")
+    ),
+    list(
+      cols = c("Smoking Status"),
+      levels = c("Never", "Former", "Current")
+    )
+  )
+
+  # Read the data - reactive expression for the raw data
+  raw_data <- reactive({
+       df = read_csv("https://uwmadison.box.com/shared/static/a2a74zejbdt5ywk7pxsvsw06gsypi8to.csv",
+                show_col_types = FALSE) 
+      for (def in ordered_factor_definitions) {
+            # Find which columns from the current definition actually exist in the data
+            cols_to_process <- intersect(def$cols, names(df))
+  
+            # Only proceed if any columns matched
+            if (length(cols_to_process) > 0) {
+                # Apply the factor conversion using the defined levels
+                df <- df %>%
+                    mutate(across(all_of(cols_to_process),
+                                  ~factor(., levels = def$levels, ordered = TRUE)))
+            } else {
+                warning(paste("Defined ordered columns not found in data:", paste(def$cols, collapse=", ")))
+            }
+        }
+      df
   })
-  
-  
+
   # Update the correlation dropdowns with actual column names when data is loaded
   observe({
-    cols <- names(data())
-    updateSelectInput(session, "xvar", choices = cols)
-    updateSelectInput(session, "yvar", choices = cols)
+      req(raw_data()) # Ensure raw_data is loaded
+      # Filter out potentially problematic columns if needed, e.g., ID columns
+      # cols <- names(raw_data())[sapply(raw_data(), function(x) !is.character(x) || length(unique(x)) > 1)]
+      cols <- names(raw_data())
+      # Set initial selections more robustly
+      selected_x <- if ("Age" %in% cols) "Age" else cols[1]
+      selected_y <- if ("Cognitive Test Score" %in% cols) "Cognitive Test Score" else cols[min(2, length(cols))]
+
+      updateSelectInput(session, "xvar", choices = cols, selected = selected_x)
+      updateSelectInput(session, "yvar", choices = cols, selected = selected_y)
   })
-  
+
+  # Update the slider range for age based on the actual data
+   observe({
+       req(raw_data())
+       min_age <- floor(min(raw_data()$Age, na.rm = TRUE))
+       max_age <- ceiling(max(raw_data()$Age, na.rm = TRUE))
+       updateSliderInput(session, "age_range", min = min_age, max = max_age, value = c(min_age, max_age))
+   })
+
+
+  # Toggle and update the 'show_other' checkbox based on variable selection
   observe({
+    req(input$xvar, input$yvar) # Ensure inputs are available
     needs_other_option <- input$xvar == "Country" || input$yvar == "Country"
     shinyjs::toggleState(id = "show_other", condition = needs_other_option)
-    
-    # Update the checkbox label based on which variables are selected
-    if (input$xvar == "Country" && input$yvar == "Country") {
-      updateCheckboxInput(session, "show_other", 
-                          label = "Show 'Other' Category for Countries")
-    } else if (input$xvar == "Country") {
-      updateCheckboxInput(session, "show_other", 
-                          label = "Show 'Other' Category for Country (X-axis)")
-    } else if (input$yvar == "Country") {
-      updateCheckboxInput(session, "show_other", 
-                          label = "Show 'Other' Category for Country (Y-axis)")
-    } else {
-      updateCheckboxInput(session, "show_other", 
-                          label = "Show 'Other' Category for Country")
+
+    # Update the checkbox label
+    label_text <- "Show 'Other' Category for Country"
+    if (needs_other_option) {
+        if (input$xvar == "Country" && input$yvar != "Country") {
+            label_text <- "Show 'Other' Category for Country (X-axis)"
+        } else if (input$xvar != "Country" && input$yvar == "Country") {
+            label_text <- "Show 'Other' Category for Country (Y-axis)"
+        } else if (input$xvar == "Country" && input$yvar == "Country") {
+             label_text <- "Show 'Other' Category for Countries"
+        }
     }
+    updateCheckboxInput(session, "show_other", label = label_text)
+
+     # If neither is country, reset checkbox to FALSE and disable it
+     if (!needs_other_option) {
+       updateCheckboxInput(session, "show_other", value = FALSE)
+     }
   })
-  
-  # Apply filters to the data
+
+  # Apply filters to the data - triggered by button
+  # This performs the main data reduction based on user filters
   filtered_data <- eventReactive(input$apply_filters, {
-    df <- data()
-    
+    req(raw_data(), input$age_range, input$gender, input$diagnosis) # Ensure dependencies are met
+    df <- raw_data()
+
     # Apply age filter
     df <- df %>% filter(Age >= input$age_range[1] & Age <= input$age_range[2])
-    
+
     # Apply gender filter if not "All"
     if(input$gender != "All") {
       df <- df %>% filter(Gender == input$gender)
     }
-    
+
     # Apply diagnosis filter if not "All"
+    # Use the correct column name `Alzheimer’s Diagnosis`
     if(input$diagnosis != "All") {
-      df <- df %>% filter(`A` == input$diagnosis)
+      df <- df %>% filter(`Alzheimer’s Diagnosis` == input$diagnosis)
     }
-    
+
     df
-  }, ignoreNULL = FALSE)
-  
-  observe({
-      output$main_plot <- renderPlotly({
-        df <- filtered_data()
-        
-        # Helper function to create bins for numeric variables
-        create_bins <- function(var, var_name, n_bins) {
-          if(is.numeric(var)) {
-            # Create bins for numeric variables
-            breaks <- quantile(var, probs = seq(0, 1, length.out = n_bins + 1), na.rm = TRUE)
-            # Ensure unique breaks (in case of ties in quantiles)
-            breaks <- unique(breaks)
-            if(length(breaks) <= 1) { # Handle cases with a single unique value
-              return(rep("Single Value", length(var)))
-            }
-            # Use cut to bin the values
-            return(cut(var, breaks = breaks, include.lowest = TRUE, dig.lab = 3))
-          } else {
-            # For categorical variables, handle country specially
-            if(var_name == "Country") {
-              # Count occurrences of each country
-              country_counts <- table(var)
-              # Sort countries by frequency
-              top_countries <- names(sort(country_counts, decreasing = TRUE)[1:n_bins])
-              
-              # Create a factor with "Other" level for less common countries
-              if(!input$show_other) {
-                # Filter out the "Other" category
-                return(factor(ifelse(var %in% top_countries, as.character(var), NA)))
-              } else {
-                return(factor(ifelse(var %in% top_countries, as.character(var), "Other")))
-              }
-            } else {
-              # For other categorical variables, limit to the most common categories if there are too many
-              if(length(unique(var)) > n_bins) {
-                top_cats <- names(sort(table(var), decreasing = TRUE)[1:n_bins])
-                var_factor <- factor(ifelse(var %in% top_cats, as.character(var), "Other"))
-                return(var_factor)
-              } else {
-                return(factor(var))
-              }
-            }
-          }
-        }
-        
-        # Create bins for x and y variables
-        x_bins <- create_bins(df[[input$xvar]], input$xvar, input$bin_count)
-        y_bins <- create_bins(df[[input$yvar]], input$yvar, input$bin_count)
-        
-        # Create a data frame with the binned variables
-        binned_df <- df %>%
-          mutate(
-            x_binned = x_bins,
-            y_binned = y_bins
-          ) %>%
-          drop_na(x_binned, y_binned)
-        
-        
-        # Summarize the data based on the bins
-        summary_df <- binned_df %>%
-          group_by(x_binned, y_binned) %>%
-          summarise(
-            count = n(),
-            alz_count = sum(`Alzheimer’s Diagnosis` == "Yes"),
-            alz_pct = mean(`Alzheimer’s Diagnosis` == "Yes") * 100,
-            avg_age = mean(Age, na.rm = TRUE),
-            .groups = "drop"
-          )
-        
-        # Determine title and color scale based on selected summary metric
-        if(input$summary_metric == "alz_pct") {
-          title <- paste("Alzheimer's Percentage by", input$xvar, "and", input$yvar)
-          color_scale <- scale_fill_gradient(
-            low = "#69b3a2", high = "#e15759",
-            name = "Alzheimer's %"
-          )
-          hover_text <- with(summary_df, 
-                             paste0("Group: ", x_binned, " & ", y_binned,
-                                    "<br>Alzheimer's: ", round(alz_pct, 1), "%",
-                                    "<br>Count: ", count,
-                                    "<br>Average Age: ", round(avg_age, 1)))
-        } else if(input$summary_metric == "avg_age") {
-          title <- paste("Average Age by", input$xvar, "and", input$yvar)
-          color_scale <- scale_fill_viridis_c(
-            option = "viridis",
-            name = "Average Age"
-          )
-          hover_text <- with(summary_df, 
-                             paste0("Group: ", x_binned, " & ", y_binned,
-                                    "<br>Average Age: ", round(avg_age, 1),
-                                    "<br>Alzheimer's: ", round(alz_pct, 1), "%",
-                                    "<br>Count: ", count))
-        } else { # count
-          title <- paste("Number of People by", input$xvar, "and", input$yvar)
-          color_scale <- scale_fill_viridis_c(
-            option = "plasma",
-            name = "Count",
-            trans = "log10"
-          )
-          hover_text <- with(summary_df, 
-                             paste0("Group: ", x_binned, " & ", y_binned,
-                                    "<br>Count: ", count,
-                                    "<br>Alzheimer's: ", round(alz_pct, 1), "%",
-                                    "<br>Average Age: ", round(avg_age, 1)))
-        }
-        
-        # Size of points based on count (log scale to prevent huge differences)
-        summary_df$point_size <- sqrt(summary_df$count) * 0.5
-        
-        # Create the plot with ggplot2
-        p <- ggplot(summary_df, aes(
-          x = x_binned, 
-          y = y_binned,
-          fill = get(input$summary_metric),
-          size = point_size,
-          text = hover_text
-        )) +
-          geom_point(shape = 21, alpha = 0.9) +
-          labs(title = title,
-               x = input$xvar,
-               y = input$yvar) +
-          theme_minimal() +
-          theme(
-            axis.text.x = element_text(angle = 45, hjust = 1),
-            legend.position = "right"
-          ) +
-          color_scale +
-          guides(size = "none") # Hide the size legend
-        
-        # Convert to plotly with custom hover
-        ggplotly(p, tooltip = "text") %>%
-          layout(margin = list(b = 100)) # Add margin for rotated x labels
-      })
-      
-      # Update the explanation for correlation plot
-      output$plot_explanation <- renderUI({
-        explanation_text <- if (input$summary_metric == "alz_pct") {
-          "the percentage with Alzheimer's in that group."
-        } else if (input$summary_metric == "avg_age") {
-          "the average age of people in that group."
-        } else {
-          "how many people are in that group."
-        }
-        
-        tags$div(
-          tags$h4("What does this chart show?"),
-          tags$p("This chart groups people with similar characteristics and shows patterns across groups."),
-          tags$p("Each bubble represents a group of people with similar values for the two selected variables."),
-          tags$p("The size of each bubble shows how many people are in that group."),
-          tags$p("The color shows ", explanation_text),
-          tags$p("Hover over bubbles to see detailed information.")
-        )
-      })
+  }, ignoreNULL = FALSE) # ignoreNULL = FALSE ensures it runs on startup with initial values
+
+
+  aggregated_data <- reactive({
+      req(filtered_data(), input$xvar, input$yvar, input$bin_count, input$summary_metric)
+      # Ensure selected variables exist in the filtered data
+      validate(
+          need(input$xvar %in% names(filtered_data()), paste("X Variable:", input$xvar, "not found.")),
+          need(input$yvar %in% names(filtered_data()), paste("Y Variable:", input$yvar, "not found."))
+      )
+
+      df <- filtered_data()
+      x_var_name <- input$xvar
+      y_var_name <- input$yvar
+
+       # Check if data is empty after filtering
+       validate(need(nrow(df) > 0, "No data available for the selected filters."))
+
+      # Create bins for x and y variables using the helper function
+      # Need to handle potential errors if binning fails (e.g., all NAs)
+       x_bins <- tryCatch({
+           create_bins(df[[x_var_name]], x_var_name, input$bin_count, input$show_other)
+       }, error = function(e) {
+           showNotification(paste("Error creating bins for X variable:", e$message), type = "error")
+           return(NULL)
+       })
+       validate(need(!is.null(x_bins), "Failed to create bins for X variable."))
+
+       y_bins <- tryCatch({
+           create_bins(df[[y_var_name]], y_var_name, input$bin_count, input$show_other)
+       }, error = function(e) {
+           showNotification(paste("Error creating bins for Y variable:", e$message), type = "error")
+           return(NULL)
+       })
+       validate(need(!is.null(y_bins), "Failed to create bins for Y variable."))
+
+
+      # Create a data frame with the binned variables
+      binned_df <- df %>%
+        mutate(
+          x_binned = x_bins,
+          y_binned = y_bins
+        ) %>%
+        # Drop rows where binning resulted in NA (e.g. 'Other' country when hidden)
+        # or original value was NA
+        drop_na(x_binned, y_binned)
+
+       # Check if data is empty after binning and dropping NAs
+       validate(need(nrow(binned_df) > 0, "No data points remaining after grouping/binning."))
+
+       
+      # Summarize the data based on the bins
+      summary_df <- binned_df %>%
+        group_by(x_binned, y_binned, .drop = FALSE) %>% # .drop=FALSE keeps all factor levels
+        summarise(
+          count = n(),
+           # Ensure 'Alzheimer’s Diagnosis' column exists before summarising
+           alz_count = if ("Alzheimer’s Diagnosis" %in% names(.)) sum(`Alzheimer’s Diagnosis` == "Yes", na.rm = TRUE) else 0,
+           alz_pct = if ("Alzheimer’s Diagnosis" %in% names(.)) mean(`Alzheimer’s Diagnosis` == "Yes", na.rm = TRUE) * 100 else 0,
+           avg_age = if ("Age" %in% names(.)) mean(Age, na.rm = TRUE) else NA_real_,
+           .groups = "drop" # Drop grouping structure after summarising
+        ) %>%
+         filter(count > 0) # Remove combinations with zero counts if .drop=FALSE kept them
+
+       # Check if summary resulted in data
+        validate(need(nrow(summary_df) > 0, "Aggregation resulted in empty dataset. Check binning and filters."))
+      # print(summary_df)
+      return(summary_df)
   })
-  
-  # Explanatory text for plots
+
+
+  # Render the main plot using the pre-aggregated data
+  output$main_plot <- renderPlotly({
+    summary_df <- aggregated_data() # Use the aggregated data
+
+    # Determine title and color scale based on selected summary metric
+    color_var <- input$summary_metric
+    fill_label <- ""
+    color_scale <- NULL # Initialize
+
+    if(color_var == "alz_pct") {
+      title <- paste("Alzheimer's Percentage by", input$xvar, "and", input$yvar)
+      fill_label <- "Alzheimer's %"
+      color_scale <- scale_fill_gradient(low = "#00b300", high = "#e10000", name = fill_label, na.value="grey80")
+      hover_text <- with(summary_df,
+                         paste0(input$xvar, ": ", x_binned, "<br>",
+                                input$yvar, ": ", y_binned, "<br>",
+                                "Alzheimer's: ", round(alz_pct, 1), "%",
+                                "<br>Count: ", count,
+                                "<br>Average Age: ", round(avg_age, 1)))
+    } else if(color_var == "avg_age") {
+      title <- paste("Average Age by", input$xvar, "and", input$yvar)
+      fill_label <- "Average Age"
+      color_scale <- scale_fill_viridis_c(option = "viridis", name = fill_label, na.value="grey80")
+       hover_text <- with(summary_df,
+                         paste0(input$xvar, ": ", x_binned, "<br>",
+                                input$yvar, ": ", y_binned, "<br>",
+                                "Average Age: ", round(avg_age, 1),
+                                "<br>Alzheimer's: ", round(alz_pct, 1), "%",
+                                "<br>Count: ", count))
+    } else { # count
+      title <- paste("Number of People by", input$xvar, "and", input$yvar)
+      fill_label <- "Count (log10)"
+       # Handle potential log(0) issues for color scale if counts are 0 (though filtered above)
+       # Use sqrt transform for better visual spread if log is problematic
+      color_scale <- scale_fill_viridis_c(option = "plasma", name = fill_label, na.value="grey80", trans = "sqrt") # Using sqrt instead of log10 for robustness
+      hover_text <- with(summary_df,
+                         paste0(input$xvar, ": ", x_binned, "<br>",
+                                input$yvar, ": ", y_binned, "<br>",
+                                "Count: ", count,
+                                "<br>Alzheimer's: ", round(alz_pct, 1), "%",
+                                "<br>Average Age: ", round(avg_age, 1)))
+    }
+
+    # Size of points based on count (sqrt scale for better visual scaling)
+    # Add small constant to avoid sqrt(0) issues if counts can be 0
+    
+
+    # Create the plot with ggplot2
+    p <- ggplot(summary_df, aes(
+      x = x_binned,
+      y = y_binned,
+      fill = .data[[color_var]], # Use .data pronoun for programmatic variable names
+      size = 5,
+      text = hover_text # Map hover text to the 'text' aesthetic for ggplotly
+    )) +
+      geom_point(shape = 21, alpha = 0.8, na.rm = TRUE) + # Use shape 21 for fillable points
+      labs(title = title,
+           x = input$xvar,
+           y = input$yvar) +
+      theme_minimal() +
+      theme(
+        axis.text.x = element_text(angle = 45, hjust = 1, size=9), # Adjust text size if needed
+        axis.text.y = element_text(size=9), # Adjust text size if needed
+        legend.position = "right",
+        plot.title = element_text(hjust = 0.5) # Center title
+      ) +
+      color_scale + # Apply the determined color scale
+      scale_size(range = c(2, 10)) + # Control min/max size of points
+      guides(size = "none") # Hide the size legend
+
+    # Convert to plotly with custom hover
+    # Need to ensure x/y axes are treated as categorical if they are factors/character
+     # This often happens automatically, but can force with layout(xaxis=list(type="category")) if needed
+    ggplotly(p, tooltip = "text") %>%
+      layout(margin = list(b = 100, l = 100)) # Adjust margins as needed
+
+  })
+
+
+  # Update the explanation for the plot based on the summary metric
   output$plot_explanation <- renderUI({
-      tags$div(
-        tags$h4("What does this chart show?"),
-        tags$p("This scatter plot shows the relationship between two variables you've selected."),
-        tags$p("Each dot represents a person in the dataset. If there's a pattern (like dots forming a line), it suggests the variables might be related.")
-      )
+    req(input$summary_metric)
+    explanation_text <- switch(input$summary_metric,
+                               "alz_pct" = "the percentage with Alzheimer's in that group.",
+                               "avg_age" = "the average age of people in that group.",
+                               "count"   = "how many people are in that group (log scale).",
+                               "an unknown metric.") # Default case
+
+    tags$div(style="margin-top: 15px;",
+      tags$h4("What does this chart show?"),
+      tags$p(paste("This chart groups people based on the selected X variable (", input$xvar, ") and Y variable (", input$yvar,"). Each variable is divided into approximately", input$bin_count, "groups (bins).")),
+      tags$p("Each bubble represents one combination of an X-group and a Y-group."),
+      tags$p("The color shows", explanation_text),
+      tags$p("Hover over bubbles to see detailed information for that specific group combination."),
+       if(input$xvar == "Country" || input$yvar == "Country") {
+          tags$p(paste("For Country:", if(input$show_other) "Less frequent countries are grouped into 'Other'." else "Only the most frequent countries are shown."))
+       }
+    )
   })
-  
-  # Data summary output
-  output$data_summary <- renderPrint({
-    summary(filtered_data())
-  })
-  
-  # Data table output
-  output$data_table <- renderDT({
-    datatable(filtered_data(), 
-              options = list(scrollX = TRUE, 
-                             pageLength = 10,
-                             lengthMenu = c(5, 10, 15, 20)),
-              filter = "top",
-              rownames = FALSE) %>%
-      formatStyle(
-        'Alzheimer’s Diagnosis',
-        backgroundColor = styleEqual(
-          c('Yes', 'No'), 
-          c('#fadadd', '#d3f8d3')
-        )
-      )
-  })
+
 }
 
 # Run the application
