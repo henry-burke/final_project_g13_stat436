@@ -26,28 +26,26 @@ library(tidyverse)
 library(leaflet)
 library(rnaturalearth)
 library(sf)
-library(viridis)
 library(scales)
+library(htmltools)
+library(htmlwidgets)
 
 # Read and prepare data
-alz = read_csv("https://uwmadison.box.com/shared/static/a2a74zejbdt5ywk7pxsvsw06gsypi8to.csv") |>
+alz <- read_csv("https://uwmadison.box.com/shared/static/a2a74zejbdt5ywk7pxsvsw06gsypi8to.csv") |>
   mutate(
     across(Country, str_replace, "USA", "United States"),
     across(Country, str_replace, "UK", "United Kingdom")
   ) |>
-  rename_at(vars(25), ~ "Alzheimer's Diagnosis")
-  # mutate(
-  #   `Alzheimer’s Diagnosis` = if_else(`Alzheimer's Diagnosis` == "Yes", 1, 0)
-  # )
+  rename_at(vars(25), ~ "Alzheimer's Diagnosis") |>
+  mutate(`Alzheimer's Diagnosis` = if_else(`Alzheimer's Diagnosis` == "Yes", 1, 0))
 
-# Get country geographical data
-countries_geo = ne_countries(scale = "medium", returnclass = "sf")
-# Properly rename for sf objects
-countries_geo$Country = countries_geo$name
-countries_geo$Country[countries_geo$Country == "United States of America"] = "United States"
+# Get country shapes
+countries_geo <- ne_countries(scale = "medium", returnclass = "sf")
+countries_geo$Country <- countries_geo$name
+countries_geo$Country[countries_geo$Country == "United States of America"] <- "United States"
 
-# Compute metrics by country
-country_metrics = alz |>
+# Compute metrics
+country_metrics <- alz |>
   group_by(Country) |>
   summarize(
     sample_size = n(),
@@ -57,34 +55,103 @@ country_metrics = alz |>
   ) |>
   filter(sample_size >= 5, !is.na(diabetes_rate), !is.na(avg_age))
 
-# Get coordinates for the circles
-countries_centroid = st_centroid(countries_geo)
-countries_coords = as.data.frame(st_coordinates(countries_centroid))
-countries_coords$Country = countries_geo$Country
+# Get centroids and coordinates
+suppressWarnings({
+  countries_centroid <- st_centroid(countries_geo)
+})
+countries_coords <- as.data.frame(st_coordinates(countries_centroid))
+countries_coords$Country <- countries_geo$Country
 
-# Join coordinates with metrics data
-circles_data = country_metrics |>
+circles_data <- country_metrics |>
   inner_join(countries_coords, by = "Country")
 
-# Join with geographical data for polygons
-map_data = countries_geo |>
+map_data <- countries_geo |>
   inner_join(country_metrics, by = "Country")
 
-# Create color palettes
-diabetes_palette = colorNumeric(palette = "Reds", domain = range(country_metrics$diabetes_rate))
-age_palette = colorNumeric(palette = "YlOrBr", domain = range(country_metrics$avg_age))
+# Define palettes
+diabetes_palette <- colorNumeric("YlOrBr", domain = country_metrics$diabetes_rate)
+age_palette <- colorNumeric("YlOrBr", domain = country_metrics$avg_age)
 
-# Create the combined map directly without creating intermediate maps
+alz_radius <- function(rate) sqrt(rate) * 12
+alz_color <- "darkorchid"
+
+# Alzheimer’s custom circle size legend
+addAlzheimersLegend <- function(map) {
+  addLegendCustom <- function(map, colors, labels, sizes, opacity = 1) {
+    legendHTML <- paste0(
+      "<div style='line-height: 1.3em; font-size: 11px;'>",
+      paste(
+        "<div style='display: flex; align-items: center;'>",
+        "<svg width='", sizes * 2, "' height='", sizes * 2, "'>",
+        "<circle cx='", sizes, "' cy='", sizes, "' r='", sizes, "' fill='", colors, "' fill-opacity='", opacity, "' stroke='black' stroke-width='1'/>",
+        "</svg>",
+        "<span style='margin-left: 6px;'>", labels, "</span>",
+        "</div>", collapse = ""),
+      "</div>"
+    )
+    addControl(map, html = legendHTML, position = "bottomleft")
+  }
+
+  sizes <- c(4, 8, 12)
+  labels <- c("Low Alzheimer's Rate", "Medium", "High")
+  colors <- rep(alz_color, 3)
+
+  map <- addLegendCustom(map, colors, labels, sizes, opacity = 0.8)
+  return(map)
+}
+
+# Instructions box
+instructions_html <- HTML("<div style='padding: 4px 6px; background: white; font-size: 11px; border: 1px solid gray; border-radius: 4px;'>
+<b>How to use:</b><br>
+Hover for details<br>
+Switch layers top-right<br>
+Circle = Alzheimer's rate
+</div>")
+
+# Custom legends (as hidden divs)
+diabetes_legend <- HTML("
+  <div id='diabetes-legend' style='display: none; background: white; padding: 6px; font-size: 12px; border: 1px solid #999; border-radius: 4px;'>
+    <strong>Diabetes Rate</strong><br>
+    <svg height='80' width='20'>
+      <defs>
+        <linearGradient id='grad1' x1='0%' y1='100%' x2='0%' y2='0%'>
+          <stop offset='0%' style='stop-color:#ffffcc;stop-opacity:1' />
+          <stop offset='100%' style='stop-color:#d95f0e;stop-opacity:1' />
+        </linearGradient>
+      </defs>
+      <rect width='20' height='80' fill='url(#grad1)' />
+    </svg><br>
+    <small>Low → High</small>
+  </div>
+")
+
+age_legend <- HTML("
+  <div id='age-legend' style='display: none; background: white; padding: 6px; font-size: 12px; border: 1px solid #999; border-radius: 4px;'>
+    <strong>Average Age</strong><br>
+    <svg height='80' width='20'>
+      <defs>
+        <linearGradient id='grad2' x1='0%' y1='100%' x2='0%' y2='0%'>
+          <stop offset='0%' style='stop-color:#ffffcc;stop-opacity:1' />
+          <stop offset='100%' style='stop-color:#d95f0e;stop-opacity:1' />
+        </linearGradient>
+      </defs>
+      <rect width='20' height='80' fill='url(#grad2)' />
+    </svg><br>
+    <small>Low → High</small>
+  </div>
+")
+
+# Build map
 combined_map <- leaflet() |>
   addTiles() |>
   setView(lng = 0, lat = 20, zoom = 2) |>
-  # Add the base layers 
+
+  # Diabetes layer
   addPolygons(
     data = map_data,
     fillColor = ~diabetes_palette(diabetes_rate),
     fillOpacity = 0.7,
-    weight = 1,
-    color = "#333333",
+    weight = 1, color = "#333333",
     highlightOptions = highlightOptions(weight = 2, color = "#666666"),
     label = ~paste0(Country, ": Diabetes Rate = ", percent(diabetes_rate)),
     popup = ~paste0(
@@ -96,12 +163,13 @@ combined_map <- leaflet() |>
     ),
     group = "Diabetes Rate"
   ) |>
+
+  # Age layer
   addPolygons(
     data = map_data,
     fillColor = ~age_palette(avg_age),
     fillOpacity = 0.7,
-    weight = 1,
-    color = "#333333",
+    weight = 1, color = "#333333",
     highlightOptions = highlightOptions(weight = 2, color = "#666666"),
     label = ~paste0(Country, ": Average Age = ", round(avg_age, 1), " years"),
     popup = ~paste0(
@@ -113,72 +181,59 @@ combined_map <- leaflet() |>
     ),
     group = "Average Age"
   ) |>
-  # Add circle markers for Alzheimer's rates on both layers
+
+  # Alzheimer’s circles
   addCircleMarkers(
     data = circles_data,
-    lng = ~X,
-    lat = ~Y,
-    radius = ~sqrt(alzheimers_rate) * 15,
-    stroke = TRUE,
-    color = "black",
-    weight = 1,
-    fillColor = "purple",
-    fillOpacity = 0.8,
+    lng = ~X, lat = ~Y,
+    radius = ~alz_radius(alzheimers_rate),
+    stroke = TRUE, color = "black", weight = 1,
+    fillColor = alz_color, fillOpacity = 0.8,
     popup = ~paste0(
       "<strong>", Country, "</strong><br>",
       "Alzheimer's Rate: ", percent(alzheimers_rate)
     ),
-    group = "Diabetes Rate"
-  ) |>
-  addCircleMarkers(
-    data = circles_data,
-    lng = ~X,
-    lat = ~Y,
-    radius = ~sqrt(alzheimers_rate) * 15,
-    stroke = TRUE,
-    color = "black",
-    weight = 1,
-    fillColor = "purple",
-    fillOpacity = 0.8,
-    popup = ~paste0(
-      "<strong>", Country, "</strong><br>",
-      "Alzheimer's Rate: ", percent(alzheimers_rate)
-    ),
-    group = "Average Age"
-  ) |>
-  # Add appropriate legends for each layer
-  addLegend(
-    position = "bottomright",
-    pal = diabetes_palette,
-    values = seq(min(country_metrics$diabetes_rate), max(country_metrics$diabetes_rate), length.out = 5),
-    title = "Diabetes Rate",
-    labFormat = labelFormat(suffix = "%", transform = function(x) x * 100),
-    opacity = 0.7,
-    group = "Diabetes Rate"
-  ) |>
-  addLegend(
-    position = "bottomright",
-    pal = age_palette,
-    values = seq(min(country_metrics$avg_age), max(country_metrics$avg_age), length.out = 5),
-    title = "Average Age (years)",
-    opacity = 0.7,
-    group = "Average Age"
-  ) |>
-  # Add legend for Alzheimer's circles (shown with both layers)
-  addLegend(
-    position = "bottomleft",
-    colors = "purple",
-    labels = "Alzheimer's Rate (circle size)",
-    opacity = 0.8,
     group = c("Diabetes Rate", "Average Age")
   ) |>
-  # Add layer control
+
+  # Layer toggles
   addLayersControl(
     baseGroups = c("Diabetes Rate", "Average Age"),
     options = layersControlOptions(collapsed = FALSE)
-  )
+  ) |>
 
+  # Add static controls
+  addAlzheimersLegend() |>
+  addControl(instructions_html, position = "topleft") |>
+  addControl(diabetes_legend, position = "bottomright") |>
+  addControl(age_legend, position = "bottomright") |>
+
+  # JavaScript toggle logic
+  onRender("
+    function(el, x) {
+      var diabetesLegend = document.getElementById('diabetes-legend');
+      var ageLegend = document.getElementById('age-legend');
+
+      var radios = el.querySelectorAll('input[type=radio]');
+      radios.forEach(function(radio) {
+        radio.addEventListener('change', function() {
+          if (radio.value.includes('Diabetes')) {
+            diabetesLegend.style.display = 'block';
+            ageLegend.style.display = 'none';
+          } else {
+            diabetesLegend.style.display = 'none';
+            ageLegend.style.display = 'block';
+          }
+        });
+      });
+
+      diabetesLegend.style.display = 'block';  // show one by default
+    }
+  ")
+
+# Show map
 combined_map
+
 ```
 
 ---
