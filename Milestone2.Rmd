@@ -1,0 +1,359 @@
+```{r}
+# ─────────────────────────────────────────────
+# Libraries and data load
+# ─────────────────────────────────────────────
+library(shiny)
+library(dplyr)
+library(plotly)
+library(readr)
+library(htmltools)
+
+alz <- read_csv("alzheimers_prediction_dataset.csv", show_col_types = FALSE) %>%
+  rename(Diagnosis = `Alzheimer’s Diagnosis`)
+
+# ─────────────────────────────────────────────
+# UI
+# ─────────────────────────────────────────────
+ui <- fluidPage(
+  theme = bslib::bs_theme(bootswatch = "flatly"),
+  titlePanel("Alzheimer's Risk Factor Analysis Dashboard"),
+  
+  sidebarLayout(
+    sidebarPanel(
+      width = 3,
+      tags$div(
+        class = "filter-section",
+        tags$h4(
+          "Population Filters",
+          style = "color: #2c3e50; border-bottom: 1px solid #ddd; padding-bottom: 10px;"
+        ),
+        sliderInput(
+          inputId = "ageRange",
+          label   = "Age Range:",
+          min     = floor(min(alz$Age, na.rm = TRUE)),
+          max     = ceiling(max(alz$Age, na.rm = TRUE)),
+          value   = c(50, 90)
+        ),
+        selectInput(
+          inputId  = "genderFilter",
+          label    = "Gender:",
+          choices  = c("All", unique(alz$Gender)),
+          selected = "All"
+        ),
+        selectInput(
+          inputId  = "countryFilter",
+          label    = "Country:",
+          choices  = c("All", unique(alz$Country)),
+          selected = "All"
+        )
+      ),
+      
+      tags$hr(),
+      
+      tags$div(
+        class = "analysis-section",
+        tags$h4(
+          "Analysis Variables",
+          style = "color: #2c3e50; border-bottom: 1px solid #ddd; padding-bottom: 10px;"
+        ),
+        
+        # 분석용 변수 선택지 (범주형 + binning된 숫자형 포함)
+        selectInput(
+          inputId  = "varChoice",
+          label    = "Primary Risk Factor:",
+          choices  = c(
+            # 기존 + 신규 범주형
+            "Physical Activity Level", "Smoking Status", "Alcohol Consumption",
+            "Diabetes", "Hypertension", "Cholesterol Level",
+            "Family History of Alzheimer's", "Genetic Risk Factor (APOE-ε4 allele)",
+            "Stress Levels", "Depression Level", "Sleep Quality", "Dietary Habits",
+            "Air Pollution Exposure", "Employment Status", "Marital Status",
+            "Social Engagement Level", "Income Level", "Urban vs Rural Living",
+            # 숫자형 원 변수 이름
+            "Education Level", "BMI", "Cognitive Test Score"
+          ),
+          selected = "Physical Activity Level"
+        )
+      )
+    ),
+    
+    mainPanel(
+      width = 9,
+      tags$div(
+        style = "display: flex; flex-direction: column;",
+        
+        # Key Insights
+        tags$div(
+          class = "insights-panel",
+          style = "padding: 15px; background-color: #f5f5f5; border-radius: 5px; margin-bottom: 20px;",
+          tags$h3("Key Insights", style = "margin-top: 0; color: #2c3e50;"),
+          uiOutput("keyInsights")
+        ),
+        
+        # Charts
+        tags$div(
+          style = "display: flex; flex-wrap: wrap;",
+          
+          # Pie chart
+          tags$div(
+            style = "flex: 1; min-width: 300px; margin-right: 20px;",
+            tags$div(
+              style = "background-color: white; border-radius: 5px; padding: 15px; height: 100%;",
+              tags$h4("Distribution in Alzheimer's Patients",
+                      style = "color: #2c3e50; text-align: center;"),
+              plotlyOutput("alzheimerPieChart", height = "350px")
+            )
+          ),
+          
+          # Bar chart
+          tags$div(
+            style = "flex: 1; min-width: 300px;",
+            tags$div(
+              style = "background-color: white; border-radius: 5px; padding: 15px; height: 100%;",
+              tags$h4("Comparative Statistics",
+                      style = "color: #2c3e50; text-align: center;"),
+              plotlyOutput("statsBarChart", height = "350px")
+            )
+          )
+        )
+      )
+    )
+  )
+)
+
+# ─────────────────────────────────────────────
+# Server
+# ─────────────────────────────────────────────
+server <- function(input, output, session) {
+  # 데이터 필터 + 숫자형 binning
+  filtered_data <- reactive({
+    alz %>%
+      filter(
+        Age >= input$ageRange[1],
+        Age <= input$ageRange[2],
+        (input$genderFilter  == "All" | Gender  == input$genderFilter),
+        (input$countryFilter == "All" | Country == input$countryFilter)
+      ) %>%
+      mutate(
+        `Education Level (Binned)` = cut(
+          `Education Level`,
+          breaks = c(-Inf, 4, 9, 14, Inf),
+          labels = c("Low", "Medium", "High", "Very High"),
+          right  = TRUE
+        ),
+        `BMI (Binned)` = cut(
+          BMI,
+          breaks = c(-Inf, 24.9, 29.9, Inf),
+          labels = c("Normal", "Overweight", "Obese"),
+          right  = TRUE
+        ),
+        `Cognitive Score (Binned)` = cut(
+          `Cognitive Test Score`,
+          breaks = c(-Inf, 46, 64, 82, Inf),
+          labels = c("Low", "Medium", "High", "Very High"),
+          right  = TRUE
+        )
+      )
+  })
+  
+  # 요약 통계 생성
+  summary_data <- reactive({
+    df  <- filtered_data()
+    var <- input$varChoice
+    
+    # 숫자형 변수 이름을 binning된 컬럼으로 매핑
+    var_mapped <- dplyr::case_when(
+      var == "Education Level"      ~ "Education Level (Binned)",
+      var == "BMI"                  ~ "BMI (Binned)",
+      var == "Cognitive Test Score" ~ "Cognitive Score (Binned)",
+      TRUE ~ var
+    )
+    
+    result <- df %>%
+      group_by(Diagnosis, .data[[var_mapped]]) %>%
+      summarise(Count = n(), .groups = "drop") %>%
+      filter(!is.na(.data[[var_mapped]])) %>%
+      group_by(Diagnosis) %>%
+      mutate(
+        Total      = sum(Count),
+        Percentage = round(Count / Total * 100, 1)
+      ) %>%
+      ungroup()
+    
+    comparison <- result %>%
+      select(Diagnosis, !!as.name(var_mapped), Percentage) %>%
+      tidyr::pivot_wider(names_from = Diagnosis, values_from = Percentage) %>%
+      mutate(Difference = Yes - No) %>%
+      arrange(desc(abs(Difference)))
+    
+    yes_total <- sum(df$Diagnosis == "Yes", na.rm = TRUE)
+    no_total  <- sum(df$Diagnosis == "No",  na.rm = TRUE)
+    
+    list(
+      detail      = result,
+      comparison  = comparison,
+      yes_total   = yes_total,
+      no_total    = no_total,
+      yes_percent = round(yes_total / (yes_total + no_total) * 100, 1)
+    )
+  })
+  
+  # Key Insights 패널
+  output$keyInsights <- renderUI({
+    data <- summary_data()
+    var  <- input$varChoice
+    
+    if (nrow(data$comparison) == 0) {
+      return(tags$p("Insufficient data for insights with current filter selections."))
+    }
+    
+    top_diff     <- data$comparison[1, ]
+    factor_value <- top_diff[[2]]
+    yes_percent  <- top_diff[["Yes"]]
+    no_percent   <- top_diff[["No"]]
+    difference   <- top_diff[["Difference"]]
+    direction    <- ifelse(difference > 0, "higher", "lower")
+    
+    demographic_insight <- dplyr::case_when(
+      input$genderFilter  != "All" ~ paste0("Among ", input$genderFilter, " patients, "),
+      input$countryFilter != "All" ~ paste0("In ", input$countryFilter, ", "),
+      TRUE                         ~ "Across all demographics, "
+    )
+    
+    tags$div(
+      tags$div(
+        style = "display: flex; justify-content: space-between; margin-bottom: 15px;",
+        tags$div(
+          style = "flex: 1; text-align: center; background-color: #e8f4f8; padding: 10px; border-radius: 5px; margin-right: 10px;",
+          tags$h4(data$yes_total, style = "margin: 0; color: #2980b9;"),
+          tags$p("Alzheimer's Patients", style = "margin: 0;")
+        ),
+        tags$div(
+          style = "flex: 1; text-align: center; background-color: #f8f4e8; padding: 10px; border-radius: 5px;",
+          tags$h4(paste0(data$yes_percent, "%"), style = "margin: 0; color: #d35400;"),
+          tags$p("of Selected Population", style = "margin: 0;")
+        )
+      ),
+      tags$div(
+        style = "background-color: white; padding: 15px; border-left: 4px solid #3498db; margin-bottom: 10px;",
+        tags$p(
+          tags$strong("Key Finding:"),
+          paste0(" For ", factor_value, " ", var, ", the prevalence is ",
+                 round(abs(difference), 1), "% ", direction,
+                 " in Alzheimer's patients (", yes_percent, "%) compared to non-Alzheimer's patients (", no_percent, "%).")
+        )
+      ),
+      tags$div(
+        style = "background-color: white; padding: 15px; border-left: 4px solid #2ecc71;",
+        tags$p(
+          tags$strong("Demographic Insight:"),
+          paste0(demographic_insight, data$yes_percent, "% of the filtered population has been diagnosed with Alzheimer's Disease.")
+        )
+      )
+    )
+  })
+  
+  # Pie chart
+  output$alzheimerPieChart <- renderPlotly({
+    var <- input$varChoice
+    data <- summary_data()
+    
+    var_mapped <- dplyr::case_when(
+      var == "Education Level"      ~ "Education Level (Binned)",
+      var == "BMI"                  ~ "BMI (Binned)",
+      var == "Cognitive Test Score" ~ "Cognitive Score (Binned)",
+      TRUE ~ var
+    )
+    
+    df_yes <- data$detail %>% filter(Diagnosis == "Yes")
+    
+    hovertext <- paste0(
+      df_yes[[var_mapped]], "<br>",
+      "Count: ", df_yes$Count, "<br>",
+      "Percentage: ", df_yes$Percentage, "%"
+    )
+    
+    custom_colors <- c(
+      'rgb(211,94,96)', 'rgb(128,133,133)', 'rgb(144,103,167)',
+      'rgb(171,104,87)', 'rgb(114,147,203)', 'rgb(132,186,91)',
+      'rgb(255,165,0)',  'rgb(100,149,237)', 'rgb(255,105,180)'
+    )
+    
+    plot_ly(
+      data  = df_yes,
+      labels = ~.data[[var_mapped]],
+      values = ~Count,
+      type   = "pie",
+      textposition   = "inside",
+      textinfo       = "label+percent",
+      insidetextfont = list(color = "#FFFFFF"),
+      hoverinfo      = "text",
+      text           = hovertext,
+      marker = list(colors = custom_colors, line = list(color = "#FFFFFF", width = 1)),
+      showlegend = FALSE
+    ) %>%
+      layout(
+        title  = list(text = paste("Distribution of", var, "in Alzheimer's Patients"), font = list(size = 14)),
+        xaxis  = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
+        yaxis  = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
+        margin = list(t = 50, b = 0, l = 0, r = 0)
+      )
+  })
+  
+  # Bar chart
+  output$statsBarChart <- renderPlotly({
+    var <- input$varChoice
+    data <- summary_data()
+    
+    var_mapped <- dplyr::case_when(
+      var == "Education Level"      ~ "Education Level (Binned)",
+      var == "BMI"                  ~ "BMI (Binned)",
+      var == "Cognitive Test Score" ~ "Cognitive Score (Binned)",
+      TRUE ~ var
+    )
+    
+    if (nrow(data$comparison) == 0) {
+      return(
+        plot_ly() %>%
+          layout(
+            title = "Insufficient data for comparison",
+            xaxis = list(showticklabels = FALSE),
+            yaxis = list(showticklabels = FALSE)
+          )
+      )
+    }
+    
+    comparison_data <- data$comparison %>%
+      tidyr::pivot_longer(
+        cols      = c("Yes", "No"),
+        names_to  = "Diagnosis",
+        values_to = "Percentage"
+      ) %>%
+      filter(!is.na(Percentage))
+    
+    plot_ly(
+      comparison_data,
+      x     = ~.data[[var_mapped]],
+      y     = ~Percentage,
+      color = ~Diagnosis,
+      colors = c("Yes" = "#3498db", "No" = "#e74c3c"),
+      type  = "bar"
+    ) %>%
+      layout(
+        title  = list(text = paste("Comparison of", var, "by Diagnosis"), font = list(size = 14)),
+        xaxis  = list(title = ""),
+        yaxis  = list(title = "Percentage (%)", range = c(0, max(comparison_data$Percentage) * 1.1)),
+        barmode = "group",
+        legend  = list(orientation = "h", y = -0.2),
+        margin  = list(t = 50, b = 70)
+      )
+  })
+}
+
+# ─────────────────────────────────────────────
+# Run the app
+# ─────────────────────────────────────────────
+shinyApp(ui, server)
+
+```
+
