@@ -1,7 +1,4 @@
 ```{r}
-# ─────────────────────────────────────────────
-# Libraries and data load
-# ─────────────────────────────────────────────
 library(shiny)
 library(dplyr)
 library(plotly)
@@ -10,10 +7,9 @@ library(htmltools)
 
 alz <- read_csv("alzheimers_prediction_dataset.csv", show_col_types = FALSE) %>%
   rename(Diagnosis = `Alzheimer’s Diagnosis`)
+```
 
-# ─────────────────────────────────────────────
-# UI
-# ─────────────────────────────────────────────
+```{r}
 ui <- fluidPage(
   theme = bslib::bs_theme(bootswatch = "flatly"),
   titlePanel("Alzheimer's Risk Factor Analysis Dashboard"),
@@ -57,19 +53,16 @@ ui <- fluidPage(
           style = "color: #2c3e50; border-bottom: 1px solid #ddd; padding-bottom: 10px;"
         ),
         
-        # 분석용 변수 선택지 (범주형 + binning된 숫자형 포함)
         selectInput(
           inputId  = "varChoice",
           label    = "Primary Risk Factor:",
           choices  = c(
-            # 기존 + 신규 범주형
             "Physical Activity Level", "Smoking Status", "Alcohol Consumption",
             "Diabetes", "Hypertension", "Cholesterol Level",
             "Family History of Alzheimer's", "Genetic Risk Factor (APOE-ε4 allele)",
             "Stress Levels", "Depression Level", "Sleep Quality", "Dietary Habits",
             "Air Pollution Exposure", "Employment Status", "Marital Status",
             "Social Engagement Level", "Income Level", "Urban vs Rural Living",
-            # 숫자형 원 변수 이름
             "Education Level", "BMI", "Cognitive Test Score"
           ),
           selected = "Physical Activity Level"
@@ -120,12 +113,10 @@ ui <- fluidPage(
     )
   )
 )
+```
 
-# ─────────────────────────────────────────────
-# Server
-# ─────────────────────────────────────────────
+```{r}
 server <- function(input, output, session) {
-  # 데이터 필터 + 숫자형 binning
   filtered_data <- reactive({
     alz %>%
       filter(
@@ -156,12 +147,10 @@ server <- function(input, output, session) {
       )
   })
   
-  # 요약 통계 생성
   summary_data <- reactive({
     df  <- filtered_data()
     var <- input$varChoice
     
-    # 숫자형 변수 이름을 binning된 컬럼으로 매핑
     var_mapped <- dplyr::case_when(
       var == "Education Level"      ~ "Education Level (Binned)",
       var == "BMI"                  ~ "BMI (Binned)",
@@ -198,7 +187,7 @@ server <- function(input, output, session) {
     )
   })
   
-  # Key Insights 패널
+  # Key Insights panels
   output$keyInsights <- renderUI({
     data <- summary_data()
     var  <- input$varChoice
@@ -350,9 +339,6 @@ server <- function(input, output, session) {
   })
 }
 
-# ─────────────────────────────────────────────
-# Run the app
-# ─────────────────────────────────────────────
 shinyApp(ui, server)
 
 ```
