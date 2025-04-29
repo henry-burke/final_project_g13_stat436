@@ -591,9 +591,9 @@ server <- function(input, output, session) {
           input$corr_xvar, ": ", x_binned,
           "<br>", input$corr_yvar, ": ", y_binned,
           "<br>",
-          if(var=="alz_pct") paste0("Alz %: ", round(df$alz_pct,1),"%")
-          else if(var=="avg_age") paste0("Avg Age: ", round(df$avg_age,1))
-          else paste0("Count: ", df$count)
+          if(var=="alz_pct") paste0("Alz %: ", round(alz_pct,1),"%")
+          else if(var=="avg_age") paste0("Avg Age: ", round(avg_age,1))
+          else paste0("Count: ", count)
         )
       )) +
       geom_point(shape=21, size=7, alpha=0.8) +
