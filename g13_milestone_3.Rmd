@@ -182,13 +182,10 @@ ui <- fluidPage(
   sidebarLayout(
     # ← persistent textbox on the left
     sidebarPanel(
-      textAreaInput(
-        inputId = "persistentBox",
-        label   = "Notes",
-        value   = "Lorem ipsum dolor sit amet, consectetur adipiscing elit.\nVestibulum vehicula ex eu tellus scelerisque, ut fermentum.",
-        width   = "100%",
-        height  = "300px",
-        resize = "none"
+      wellPanel(
+        tags$h4("Instructions"),
+        tags$p("Lorem ipsum dolor sit amet, consectetur adipiscing elit. 
+               Vestibulum vehicula ex eu tellus scelerisque, ut fermentum.")
       ),
       width = 3
     ),
