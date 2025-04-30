@@ -28,85 +28,85 @@ library(ggnewscale)
 #── GLOBAL DATA PREPARATION ────────────────────────────────────────────────────
 
 # 1) Load & clean the Alzheimer’s survey
-alz_df <- read_csv(
+alz_df = read_csv(
   "https://uwmadison.box.com/shared/static/a2a74zejbdt5ywk7pxsvsw06gsypi8to.csv",
   show_col_types = FALSE
-) %>%
+) |>
   mutate(
     Country = str_replace(Country, "USA", "United States"),
     Country = str_replace(Country, "UK",  "United Kingdom")
-  ) %>%
+  ) |>
   rename_at(vars(25), ~ "Alzheimer's Diagnosis")
 
 # 2) Load World Happiness
-happy_df <- read_csv(
+happy_df = read_csv(
   "https://uwmadison.box.com/shared/static/z79r9iafg3tzvm6cxagvft9auvcu868t.csv",
   show_col_types = FALSE
-) %>%
+) |>
   rename(Country = `Country name`)
 
 #── DATA FOR HAPPINESS SCATTER (Henry’s) ───────────────────────────────────────
 
 
-alzheimers <- alzheimers %>%
-  filter(!if_any(everything(), ~ . == "Medium")) %>%
-  filter(Sleep.Quality != "Average") %>%
-  filter(Dietary.Habits != "Average")
+alzheimers = alz_df |>
+  filter(!if_any(everything(), ~ . == "Medium")) |>
+  filter(`Sleep Quality` != "Average") |>
+  filter(`Dietary Habits` != "Average")
 
-country_choices <- c("All Countries", sort(unique(alzheimers$Country)))
+country_choices = c("All Countries", sort(unique(alzheimers$Country)))
 
 #── DATA FOR HAPPINESS SCATTER (Henry’s) ───────────────────────────────────────
 
-alz_by_country <- left_join(alz_df, happy_df, by = "Country") %>%
-  filter(`Alzheimer's Diagnosis` == "Yes") %>%
-  group_by(Country, `Ladder score`) %>%
+alz_by_country = left_join(alz_df, happy_df, by = "Country") |>
+  filter(`Alzheimer's Diagnosis` == "Yes") |>
+  group_by(Country, `Ladder score`) |>
   summarize(yes_count = n(), .groups = "drop")
 
 #── DATA FOR LEAFLET MAP (Sanjay’s) ────────────────────────────────────────────
 
 # numeric flag for AD
-map_alz_df <- alz_df %>%
+map_alz_df = alz_df |>
   mutate(AD_numeric = if_else(`Alzheimer's Diagnosis` == "Yes", 1, 0))
 
-countries_geo <- ne_countries(scale = "medium", returnclass = "sf") %>%
-  st_transform(crs = 4326) %>%
+countries_geo = ne_countries(scale = "medium", returnclass = "sf") |>
+  st_transform(crs = 4326) |>
   mutate(
     Country = name,
     Country = if_else(Country == "United States of America",
                       "United States", Country)
   )
 
-country_metrics <- map_alz_df %>%
-  group_by(Country) %>%
+country_metrics = map_alz_df |>
+  group_by(Country) |>
   summarize(
     sample_size     = n(),
     alzheimers_rate = mean(AD_numeric, na.rm = TRUE),
     diabetes_rate   = mean(Diabetes   == "Yes", na.rm = TRUE),
     avg_age         = mean(Age        , na.rm = TRUE),
     .groups = "drop"
-  ) %>%
+  ) |>
   filter(sample_size >= 5)
 
 suppressWarnings({
-  countries_centroid <- st_centroid(countries_geo)
+  countries_centroid = st_centroid(countries_geo)
 })
-countries_coords <- st_coordinates(countries_centroid) %>%
-  as_tibble() %>%
-  rename(X = X, Y = Y) %>%
+countries_coords = st_coordinates(countries_centroid) |>
+  as_tibble() |>
+  rename(X = X, Y = Y) |>
   bind_cols(Country = countries_geo$Country)
 
-map_data     <- inner_join(countries_geo,     country_metrics, by = "Country")
-circles_data <- inner_join(country_metrics, countries_coords, by = "Country")
+map_data     = inner_join(countries_geo,     country_metrics, by = "Country")
+circles_data = inner_join(country_metrics, countries_coords, by = "Country")
 
-diabetes_palette <- colorNumeric("YlOrBr", domain = country_metrics$diabetes_rate)
-age_palette      <- colorNumeric("YlOrBr", domain = country_metrics$avg_age)
-alz_color        <- "darkorchid"
-alz_radius       <- function(rate) sqrt(rate) * 12
+diabetes_palette = colorNumeric("YlOrBr", domain = country_metrics$diabetes_rate)
+age_palette      = colorNumeric("YlOrBr", domain = country_metrics$avg_age)
+alz_color        = "darkorchid"
+alz_radius       = function(rate) sqrt(rate) * 12
 
 # Legend helper from Sanjay
-addAlzheimersLegend <- function(map) {
-  addLegendCustom <- function(map, colors, labels, sizes, opacity = 1) {
-    legendHTML <- paste0(
+addAlzheimersLegend = function(map) {
+  addLegendCustom = function(map, colors, labels, sizes, opacity = 1) {
+    legendHTML = paste0(
       "<div style='line-height:1.3em;font-size:11px;'>",
       paste(
         "<div style='display:flex;align-items:center;'>",
@@ -123,13 +123,13 @@ addAlzheimersLegend <- function(map) {
     )
     addControl(map, html = legendHTML, position = "bottomleft")
   }
-  sizes  <- c(4,8,12)
-  labels <- c("Low Alzheimer's Rate", "Medium", "High")
-  colors <- rep(alz_color, length(sizes))
+  sizes  = c(4,8,12)
+  labels = c("Low Alzheimer's Rate", "Medium", "High")
+  colors = rep(alz_color, length(sizes))
   addLegendCustom(map, colors, labels, sizes, opacity = 0.8)
 }
 
-instructions_html <- HTML(
+instructions_html = HTML(
   "<div style='padding:4px 6px;background:white;font-size:11px;
        border:1px solid gray;border-radius:4px;'>
      <b>How to use:</b><br>
@@ -139,7 +139,7 @@ instructions_html <- HTML(
    </div>"
 )
 
-diabetes_legend <- HTML(
+diabetes_legend = HTML(
   "<div id='diabetes-legend' style='display:none;background:white;
         padding:6px;font-size:12px;border:1px solid #999;
         border-radius:4px;'>
@@ -155,7 +155,7 @@ diabetes_legend <- HTML(
    </div>"
 )
 
-age_legend <- HTML(
+age_legend = HTML(
   "<div id='age-legend' style='display:none;background:white;
         padding:6px;font-size:12px;border:1px solid #999;
         border-radius:4px;'>
@@ -174,7 +174,7 @@ age_legend <- HTML(
 
 #── UI ────────────────────────────────────────────────────────────────────────
 
-ui <- fluidPage(
+ui = fluidPage(
   useShinyjs(),
   
   # custom CSS for grey background + white cards
@@ -400,13 +400,13 @@ ui <- fluidPage(
 
 #── SERVER ───────────────────────────────────────────────────────────────────
 
-server <- function(input, output, session) {
+server = function(input, output, session) {
 
   #—— 1) Render Leaflet Map —————————————————————————————————————————————
-  output$global_map <- renderLeaflet({
-    leaflet() %>%
-      addTiles() %>%
-      setView(lng = 0, lat = 20, zoom = 2) %>%
+  output$global_map = renderLeaflet({
+    leaflet() |>
+      addTiles() |>
+      setView(lng = 0, lat = 20, zoom = 2) |>
 
       # Diabetes fill
       addPolygons(
@@ -425,7 +425,7 @@ server <- function(input, output, session) {
           "Sample Size: ", sample_size
         ),
         group = "Diabetes Rate"
-      ) %>%
+      ) |>
 
       # Age fill
       addPolygons(
@@ -443,7 +443,7 @@ server <- function(input, output, session) {
           "Sample Size: ", sample_size
         ),
         group = "Average Age"
-      ) %>%
+      ) |>
 
       # Alzheimer's circles
       addCircleMarkers(
@@ -457,17 +457,17 @@ server <- function(input, output, session) {
           "Alzheimer's Rate: ", percent(alzheimers_rate)
         ),
         group = c("Diabetes Rate","Average Age")
-      ) %>%
+      ) |>
 
       addLayersControl(
         baseGroups = c("Diabetes Rate","Average Age"),
         options    = layersControlOptions(collapsed = FALSE)
-      ) %>%
+      ) |>
 
-      addAlzheimersLegend() %>%
-      addControl(instructions_html, position = "topleft") %>%
-      addControl(diabetes_legend,  position = "bottomright") %>%
-      addControl(age_legend,       position = "bottomright") %>%
+      addAlzheimersLegend() |>
+      addControl(instructions_html, position = "topleft") |>
+      addControl(diabetes_legend,  position = "bottomright") |>
+      addControl(age_legend,       position = "bottomright") |>
 
       onRender("
         function(el,x) {
@@ -490,8 +490,8 @@ server <- function(input, output, session) {
 
 
   #—— 2) Happiness vs AD Scatter —————————————————————————————————————
-  output$happiness_scatter <- renderPlotly({
-    p <- ggplot(alz_by_country,
+  output$happiness_scatter = renderPlotly({
+    p = ggplot(alz_by_country,
                 aes(x = `Ladder score`, y = yes_count,
                     text = paste0(
                       "Country: ", Country,
@@ -505,7 +505,7 @@ server <- function(input, output, session) {
         y = "Number of Alzheimer's Diagnoses"
       )
 
-    ggplotly(p, tooltip = "text") %>%
+    ggplotly(p, tooltip = "text") |>
       layout(
         title = list(x = 0.5),
         xaxis = list(title = "World Happiness Index Score"),
@@ -517,18 +517,18 @@ server <- function(input, output, session) {
   #—— 3) Correlation Explorer ————————————————————————————————————————
 
   # helper for binning (John’s function)
-  create_bins <- function(var, var_name, n_bins, show_other) {
+  create_bins = function(var, var_name, n_bins, show_other) {
     if (is.numeric(var)) {
-      breaks <- quantile(var, probs = seq(0,1,length.out=n_bins+1),
+      breaks = quantile(var, probs = seq(0,1,length.out=n_bins+1),
                          na.rm = TRUE)
-      breaks <- unique(breaks)
+      breaks = unique(breaks)
       if (length(breaks) <= 1) {
         return(factor(rep(paste0("Value: ",
            format(unique(na.omit(var))[1],digits=3)),
            length(var))))
       }
       if (length(breaks)==2 && length(unique(na.omit(var)))>1) {
-        breaks <- seq(min(var,na.rm=TRUE), max(var,na.rm=TRUE),
+        breaks = seq(min(var,na.rm=TRUE), max(var,na.rm=TRUE),
                       length.out = n_bins+1) |> unique()
         if (length(breaks)<=1) {
           return(factor(rep(paste0("Value: ",
@@ -538,12 +538,12 @@ server <- function(input, output, session) {
       }
       cut(var, breaks=breaks, include.lowest=TRUE, dig.lab=3)
     } else {
-      var_factor <- factor(var)
-      num_levels <- nlevels(var_factor)
+      var_factor = factor(var)
+      num_levels = nlevels(var_factor)
       if (var_name=="Country") {
-        country_counts <- sort(table(var_factor), decreasing=TRUE)
-        top_n <- min(n_bins, length(country_counts))
-        top_c  <- names(country_counts)[1:top_n]
+        country_counts = sort(table(var_factor), decreasing=TRUE)
+        top_n = min(n_bins, length(country_counts))
+        top_c  = names(country_counts)[1:top_n]
         if (!show_other && length(country_counts)>top_n) {
           factor(ifelse(var %in% top_c, as.character(var), NA),
                  levels=top_c)
@@ -555,9 +555,9 @@ server <- function(input, output, session) {
         }
       } else {
         if (num_levels > n_bins) {
-          cat_counts <- sort(table(var_factor), decreasing=TRUE)
-          top_n <- min(n_bins, length(cat_counts))
-          top_c <- names(cat_counts)[1:top_n]
+          cat_counts = sort(table(var_factor), decreasing=TRUE)
+          top_n = min(n_bins, length(cat_counts))
+          top_c = names(cat_counts)[1:top_n]
           factor(ifelse(var %in% top_c, as.character(var), "Other"),
                  levels=c(top_c,"Other"))
         } else {
@@ -569,9 +569,9 @@ server <- function(input, output, session) {
 
   # initial variable choices
   observe({
-    cols <- names(alz_df)
-    sel_x <- if ("Age" %in% cols) "Age" else cols[1]
-    sel_y <- if ("Cognitive Test Score" %in% cols)
+    cols = names(alz_df)
+    sel_x = if ("Age" %in% cols) "Age" else cols[1]
+    sel_y = if ("Cognitive Test Score" %in% cols)
                "Cognitive Test Score" else cols[min(2,length(cols))]
     updateSelectInput(session, "corr_xvar",
       choices = cols, selected = sel_x)
@@ -581,7 +581,7 @@ server <- function(input, output, session) {
 
   # age slider
   observe({
-    rng <- range(alz_df$Age, na.rm=TRUE)
+    rng = range(alz_df$Age, na.rm=TRUE)
     updateSliderInput(session, "corr_age_range",
       min = floor(rng[1]), max = ceiling(rng[2]),
       value = c(floor(rng[1]), ceiling(rng[2])))
@@ -589,7 +589,7 @@ server <- function(input, output, session) {
 
   # toggle show_other
   observe({
-    needs <- input$corr_xvar=="Country" ||
+    needs = input$corr_xvar=="Country" ||
              input$corr_yvar=="Country"
     toggleState("corr_show_other", needs)
     if (!needs) {
@@ -598,35 +598,35 @@ server <- function(input, output, session) {
   })
 
   # filtered data event
-  filtered_corr <- eventReactive(input$corr_apply_filters, {
-    df <- alz_df
-    df <- df |> filter(
+  filtered_corr = eventReactive(input$corr_apply_filters, {
+    df = alz_df
+    df = df |> filter(
       Age >= input$corr_age_range[1],
       Age <= input$corr_age_range[2]
     )
     if (input$corr_gender != "All")
-      df <- df |> filter(Gender == input$corr_gender)
+      df = df |> filter(Gender == input$corr_gender)
     if (input$corr_diagnosis != "All")
-      df <- df |> filter(`Alzheimer's Diagnosis` == input$corr_diagnosis)
+      df = df |> filter(`Alzheimer's Diagnosis` == input$corr_diagnosis)
     df
   }, ignoreNULL = FALSE)
 
   # aggregation
-  summary_corr <- reactive({
-    df <- filtered_corr()
+  summary_corr = reactive({
+    df = filtered_corr()
     req(nrow(df) > 0)
 
-    x_var <- input$corr_xvar
-    y_var <- input$corr_yvar
+    x_var = input$corr_xvar
+    y_var = input$corr_yvar
 
-    x_bins <- create_bins(df[[x_var]], x_var,
+    x_bins = create_bins(df[[x_var]], x_var,
                           input$corr_bin_count,
                           input$corr_show_other)
-    y_bins <- create_bins(df[[y_var]], y_var,
+    y_bins = create_bins(df[[y_var]], y_var,
                           input$corr_bin_count,
                           input$corr_show_other)
 
-    bdf <- df |> mutate(
+    bdf = df |> mutate(
       x_binned = x_bins,
       y_binned = y_bins
     ) |> drop_na(x_binned, y_binned)
@@ -641,26 +641,26 @@ server <- function(input, output, session) {
       ) |> filter(count>0)
   })
 
-  output$corr_plot <- renderPlotly({
-    df <- summary_corr()
-    var <- input$corr_summary_metric
+  output$corr_plot = renderPlotly({
+    df = summary_corr()
+    var = input$corr_summary_metric
 
     if (var=="alz_pct") {
-      title <- paste("Alzheimer's % by", input$corr_xvar, "vs", input$corr_yvar)
-      scale_fill <- scale_fill_gradient(
+      title = paste("Alzheimer's % by", input$corr_xvar, "vs", input$corr_yvar)
+      scale_fill = scale_fill_gradient(
         low="#00b300", high="#e10000", name="Alz %"
       )
     } else if (var=="avg_age") {
-      title <- paste("Avg Age by", input$corr_xvar, "vs", input$corr_yvar)
-      scale_fill <- scale_fill_viridis_c(option="viridis",
+      title = paste("Avg Age by", input$corr_xvar, "vs", input$corr_yvar)
+      scale_fill = scale_fill_viridis_c(option="viridis",
         name="Avg Age")
     } else {
-      title <- paste("Count by", input$corr_xvar, "vs", input$corr_yvar)
-      scale_fill <- scale_fill_viridis_c(option="plasma",
+      title = paste("Count by", input$corr_xvar, "vs", input$corr_yvar)
+      scale_fill = scale_fill_viridis_c(option="plasma",
         name="Count", trans="sqrt")
     }
 
-    p <- ggplot(df, aes(
+    p = ggplot(df, aes(
         x = x_binned, y = y_binned,
         fill = .data[[var]],
         text = paste0(
@@ -683,12 +683,12 @@ server <- function(input, output, session) {
       scale_fill + scale_size(range=c(2,10)) +
       guides(size="none")
 
-    ggplotly(p, tooltip="text") %>%
+    ggplotly(p, tooltip="text") |>
       layout(margin=list(b=100,l=100))
   })
 
-  output$corr_explanation <- renderUI({
-    metric <- switch(input$corr_summary_metric,
+  output$corr_explanation = renderUI({
+    metric = switch(input$corr_summary_metric,
       alz_pct = "the % with Alzheimer's",
       avg_age = "the average age",
       count   = "the number of people (sqrt scale)"
@@ -703,7 +703,7 @@ server <- function(input, output, session) {
 
   #—— 4) Health Conditions Heatmap —————————————————————————————————————
 
-  selected_predictors <- reactive({
+  selected_predictors = reactive({
     c(input$physicalFactors, input$mentalFactors, input$lifestyleFactors, input$geneticFactors)
   })
   
@@ -734,77 +734,77 @@ server <- function(input, output, session) {
     }
   })
   
-  filtered_data <- reactive({
+  filtered_data = reactive({
     if(input$country == "All Countries") {
-      data <- alzheimers
+      data = alzheimers
     } else {
-      data <- alzheimers %>% filter(Country == input$country)
+      data = alzheimers |> filter(Country == input$country)
     }
     return(data)
   })
 
-  heatmap_data <- reactive({
-    alzheimers <- filtered_data() %>% 
-      filter(Alzheimer.s.Diagnosis == "Yes")
+  heatmap_data = reactive({
+    alzheimers = filtered_data() |> 
+      filter(`Alzheimer's Diagnosis` == "Yes")
     if(nrow(alzheimers) == 0) {
       return(NULL)
     }
     
-    conditions <- selected_predictors()
+    conditions = selected_predictors()
     if(length(conditions) == 0) return(NULL)
     
-    combined_data <- list()
+    combined_data = list()
     
-    condition_map <- list(
+    condition_map = list(
       "Diabetes" = "Diabetes",
       "Hypertension" = "Hypertension",
-      "Depression Level" = "Depression.Level",
-      "Activity Level" = "Physical.Activity.Level",
-      "Sleep Quality" = "Sleep.Quality",
-      "Social Engagement" = "Social.Engagement.Level",
-      "Family History of Alzheimer's" = "Family.History.of.Alzheimer.s",
-      "Stress Level" = "Stress.Levels"
+      "Depression Level" = "Depression Level",
+      "Activity Level" = "Physical.Activity Level",
+      "Sleep Quality" = "Sleep Quality",
+      "Social Engagement" = "Social Engagement Level",
+      "Family History of Alzheimer's" = "Family History of Alzheimer's",
+      "Stress Level" = "Stress Levels"
     )
     
     for(condition in conditions) {
       if(condition %in% names(condition_map)) {
-        column_name <- condition_map[[condition]]
-        temp <- melt(table(alzheimers$Gender, alzheimers[[column_name]]))
-        colnames(temp) <- c("Gender", "Condition", "Count")
-        temp$HealthFactor <- condition
+        column_name = condition_map[[condition]]
+        temp = melt(table(alzheimers$Gender, alzheimers[[column_name]]))
+        colnames(temp) = c("Gender", "Condition", "Count")
+        temp$HealthFactor = condition
         
         if(input$normalizeCounts) {
-          total_by_gender <- temp %>%
-            group_by(Gender, HealthFactor) %>%
+          total_by_gender = temp |>
+            group_by(Gender, HealthFactor) |>
             summarize(Total = sum(Count), .groups = "drop")
           
-          temp <- temp %>%
-            left_join(total_by_gender, by = c("Gender", "HealthFactor")) %>%
-            mutate(Count = (Count / Total) * 100) %>%
+          temp = temp |>
+            left_join(total_by_gender, by = c("Gender", "HealthFactor")) |>
+            mutate(Count = (Count / Total) * 100) |>
             select(-Total)
         }
         
-        combined_data[[length(combined_data)+1]] <- temp
+        combined_data[[length(combined_data)+1]] = temp
       }
     }
     
     if (length(combined_data) == 0) return(NULL)
     
-    heatmap_data <- do.call(rbind, combined_data)
+    heatmap_data = do.call(rbind, combined_data)
     
-    heatmap_data$HealthFactor <- factor(heatmap_data$HealthFactor, levels = conditions)
+    heatmap_data$HealthFactor = factor(heatmap_data$HealthFactor, levels = conditions)
     
     if(any(grepl("Level|Quality", heatmap_data$Condition))) {
-      level_order <- c("Low", "Medium", "High")
-      heatmap_data$Condition <- factor(heatmap_data$Condition, 
+      level_order = c("Low", "Medium", "High")
+      heatmap_data$Condition = factor(heatmap_data$Condition, 
                                      levels = c("No", "Yes", level_order))
     }
     
     return(heatmap_data)
   })
   
-  output$heatmap <- renderPlot({
-    data <- heatmap_data()
+  output$heatmap = renderPlot({
+    data = heatmap_data()
     if (is.null(data) || nrow(data) == 0) {
       return(ggplot() + 
                annotate("text", x = 0.5, y = 0.5, 
@@ -814,52 +814,52 @@ server <- function(input, output, session) {
                ylim(0, 1))
     }
     
-    color_scheme <- input$colorScheme
+    color_scheme = input$colorScheme
     if(color_scheme == "colorblind") {
-      male_colors <- scale_fill_gradient(low = "#E6F0FF", high = "#0072B2", 
+      male_colors = scale_fill_gradient(low = "#E6F0FF", high = "#0072B2", 
                                        name = if(input$normalizeCounts) "% of Male Cases" else "Male Cases")
-      female_colors <- scale_fill_gradient(low = "#FFE6E6", high = "#D55E00", 
+      female_colors = scale_fill_gradient(low = "#FFE6E6", high = "#D55E00", 
                                          name = if(input$normalizeCounts) "% of Female Cases" else "Female Cases")
     } else if(color_scheme == "sequential") {
-      male_colors <- scale_fill_gradient(low = "#E6E6FF", high = "#3333CC", 
+      male_colors = scale_fill_gradient(low = "#E6E6FF", high = "#3333CC", 
                                        name = if(input$normalizeCounts) "% of Male Cases" else "Male Cases")
-      female_colors <- scale_fill_gradient(low = "#F2E6FF", high = "#8B00CC", 
+      female_colors = scale_fill_gradient(low = "#F2E6FF", high = "#8B00CC", 
                                          name = if(input$normalizeCounts) "% of Female Cases" else "Female Cases")
     } else {
-      male_colors <- scale_fill_gradient2(low = "#4575B4", mid = "#FFFFBF", high = "#D73027", 
+      male_colors = scale_fill_gradient2(low = "#4575B4", mid = "#FFFFBF", high = "#D73027", 
                                         midpoint = median(data$Count[data$Gender == "Male"]), 
                                         name = if(input$normalizeCounts) "% of Male Cases" else "Male Cases")
-      female_colors <- scale_fill_gradient2(low = "#4575B4", mid = "#FFFFBF", high = "#D73027", 
+      female_colors = scale_fill_gradient2(low = "#4575B4", mid = "#FFFFBF", high = "#D73027", 
                                           midpoint = median(data$Count[data$Gender == "Female"]), 
                                           name = if(input$normalizeCounts) "% of Female Cases" else "Female Cases")
     }
     
-    male_data <- data %>% filter(Gender == "Male")
-    female_data <- data %>% filter(Gender == "Female")
+    male_data = data |> filter(Gender == "Male")
+    female_data = data |> filter(Gender == "Female")
     
     if(input$showLabels) {
-      male_labels <- geom_text(data = male_data, 
+      male_labels = geom_text(data = male_data, 
                               aes(x = Condition, y = HealthFactor, 
                                   label = if(input$normalizeCounts) 
                                     sprintf("%.1f%%", Count) else 
                                     as.character(Count)), 
                               color = "black", size = 3.5)
       
-      female_labels <- geom_text(data = female_data, 
+      female_labels = geom_text(data = female_data, 
                                 aes(x = Condition, y = HealthFactor, 
                                     label = if(input$normalizeCounts) 
                                       sprintf("%.1f%%", Count) else 
                                       as.character(Count)), 
                                 color = "black", size = 3.5)
     } else {
-      male_labels <- NULL
-      female_labels <- NULL
+      male_labels = NULL
+      female_labels = NULL
     }
     
-    title <- paste("Alzheimer's Cases by Gender and Health Conditions", 
+    title = paste("Alzheimer's Cases by Gender and Health Conditions", 
                  if (input$country != "All Countries") paste("in", input$country) else "")
 
-    subtitle <- if(input$normalizeCounts) {
+    subtitle = if(input$normalizeCounts) {
       "Values shown as percentages within each gender group"
     } else {
       "Values show actual case counts"
@@ -910,42 +910,42 @@ server <- function(input, output, session) {
 
   #—— 5) Pie Charts ———————————————————————————————————————————————————
 
-  filtered_pie <- reactive({
-    df <- alz_df
-    df <- df |> filter(
+  filtered_pie = reactive({
+    df = alz_df
+    df = df |> filter(
       Age >= input$pie_ageRange[1],
       Age <= input$pie_ageRange[2]
     )
     if (input$pie_genderFilter != "All")
-      df <- df |> filter(Gender == input$pie_genderFilter)
+      df = df |> filter(Gender == input$pie_genderFilter)
     if (input$pie_countryFilter != "All")
-      df <- df |> filter(Country == input$pie_countryFilter)
+      df = df |> filter(Country == input$pie_countryFilter)
     df
   })
 
-  output$pie_chart <- renderPlotly({
-    var <- input$pie_varChoice
-    df <- filtered_pie()
+  output$pie_chart = renderPlotly({
+    var = input$pie_varChoice
+    df = filtered_pie()
 
-    df_yes <- df |> filter(`Alzheimer's Diagnosis`=="Yes") |>
+    df_yes = df |> filter(`Alzheimer's Diagnosis`=="Yes") |>
       group_by(.data[[var]]) |>
       summarize(count = n(), .groups="drop") |>
       filter(!is.na(.data[[var]]))
 
-    df_no  <- df |> filter(`Alzheimer's Diagnosis`=="No") |>
+    df_no  = df |> filter(`Alzheimer's Diagnosis`=="No") |>
       group_by(.data[[var]]) |>
       summarize(count = n(), .groups="drop") |>
       filter(!is.na(.data[[var]]))
 
-    plot_ly() %>%
+    plot_ly() |>
       add_pie(data = df_yes,
               labels = ~get(var), values = ~count,
               name = "AD = Yes",
-              domain = list(x = c(0, 0.45), y = c(0,1))) %>%
+              domain = list(x = c(0, 0.45), y = c(0,1))) |>
       add_pie(data = df_no,
               labels = ~get(var), values = ~count,
               name = "AD = No",
-              domain = list(x = c(0.55,1),y=c(0,1))) %>%
+              domain = list(x = c(0.55,1),y=c(0,1))) |>
       layout(
         title = paste("AD Diagnosis Pie Charts by", var),
         showlegend = TRUE,
