@@ -159,8 +159,36 @@ age_legend = HTML(
    </div>"
 )
 
+#── DATA FOR NESTED PIE CHARTS  (Beomseong’s) ──────────────────────────────────
 
-#── UI ────────────────────────────────────────────────────────────────────────
+# Create binned variables for education, BMI, and cognitive score
+alz_df_binned <- alz_df %>%
+  mutate(
+    `Education Level (Binned)` = cut(
+      `Education Level`,
+      breaks = c(-Inf, 4, 9, 14, Inf),
+      labels = c("Low", "Medium", "High", "Very High"),
+      right = TRUE
+    ),
+    `BMI (Binned)` = cut(
+      BMI,
+      breaks = c(-Inf, 24.9, 29.9, Inf),
+      labels = c("Normal", "Overweight", "Obese"),
+      right = TRUE
+    ),
+    `Cognitive Score (Binned)` = cut(
+      `Cognitive Test Score`,
+      breaks = c(-Inf, 46, 64, 82, Inf),
+      labels = c("Low", "Medium", "High", "Very High"),
+      right = TRUE
+    )
+  )
+
+# Calculate the overall Alzheimer's rate for reference
+overall_rate_static <- round(
+  sum(alz_df$`Alzheimer's Diagnosis` == "Yes", na.rm = TRUE) / nrow(alz_df) * 100, 1)
+
+#── UI ─────────────────────────────────────────────────────────────────────────
 
 ui = fluidPage(
   useShinyjs(),
@@ -190,7 +218,7 @@ ui = fluidPage(
       ),
       wellPanel(
         tags$h4("Authors"),
-        tags$p("Henry Burke, Beomseong Kim, Jack Vaughn, John Derr, Sanjay Nagarimadugu")
+        tags$p("Henry Burke, John Derr, Beomseong Kim, Sanjay Nagarimadugu, Jack Vaughn")
       ),
       width = 3
     ),
@@ -378,33 +406,78 @@ ui = fluidPage(
         tabPanel("Pie Charts",
                  sidebarLayout(
                    sidebarPanel(
-                     sliderInput("pie_ageRange", "Age Range:",
-                                 min   = floor(min(alz_df$Age, na.rm = TRUE)),
-                                 max   = ceiling(max(alz_df$Age, na.rm = TRUE)),
-                                 value = c(50, 90)
+                     width = 3,
+                     tags$div(
+                       class = "filter-section",
+                       tags$h4("Population Filters",
+                               style = "color: #2c3e50; border-bottom: 1px solid #ddd; padding-bottom: 10px;"),
+                       sliderInput(
+                         inputId = "pie_ageRange",
+                         label = "Age Range:",
+                         min = floor(min(alz_df$Age, na.rm = TRUE)),
+                         max = ceiling(max(alz_df$Age, na.rm = TRUE)),
+                         value = c(50, 90)
+                       ),
+                       selectInput(
+                         inputId = "pie_genderFilter",
+                         label = "Gender:",
+                         choices = c("All", unique(alz_df$Gender)),
+                         selected = "All"
+                       ),
+                       selectInput(
+                         inputId = "pie_countryFilter",
+                         label = "Country:",
+                         choices = c("All", unique(alz_df$Country)),
+                         selected = "All"
+                       )
                      ),
-                     selectInput("pie_genderFilter", "Gender:",
-                                 choices = c("All", unique(alz_df$Gender)),
-                                 selected = "All"
-                     ),
-                     selectInput("pie_countryFilter", "Country:",
-                                 choices = c("All", unique(alz_df$Country)),
-                                 selected = "All"
-                     ),
-                     selectInput("pie_varChoice", "Variable to Analyze:",
-                                 choices = c(
-                                   "Physical Activity Level", "Smoking Status",
-                                   "Alcohol Consumption", "Diabetes", "Hypertension",
-                                   "Cholesterol Level", "Family History of Alzheimer’s",
-                                   "Genetic Risk Factor (APOE-ε4 allele)", "Stress Levels"
-                                 ),
-                                 selected = "Physical Activity Level"
+                     tags$hr(),
+                     tags$div(
+                       class = "analysis-section",
+                       tags$h4("Analysis Variables",
+                               style = "color: #2c3e50; border-bottom: 1px solid #ddd; padding-bottom: 10px;"),
+                       selectInput(
+                         inputId = "pie_varChoice",
+                         label = "Primary Risk Factor:",
+                         choices = c(
+                           "Physical Activity Level", "Smoking Status", "Alcohol Consumption",
+                           "Diabetes", "Hypertension", "Cholesterol Level",
+                           "Family History of Alzheimer’s", "Genetic Risk Factor (APOE-ε4 allele)",
+                           "Stress Levels", "Depression Level", "Sleep Quality", "Dietary Habits",
+                           "Air Pollution Exposure", "Employment Status", "Marital Status",
+                           "Social Engagement Level", "Income Level", "Urban vs Rural Living",
+                           "Education Level", "BMI", "Cognitive Test Score"
+                         ),
+                         selected = "Physical Activity Level"
+                       )
                      )
                    ),
+                   
                    mainPanel(
-                     plotlyOutput("pie_chart")
+                     width = 9,
+                     tags$div(style = "display: flex; flex-direction: column;",
+                              
+                              tags$div(
+                                class = "insights-panel",
+                                style = "padding: 15px; background-color: #f5f5f5; border-radius: 5px; margin-bottom: 20px;",
+                                tags$h3("Key Insights", style = "margin-top: 0; color: #2c3e50;"),
+                                uiOutput("keyInsights")
+                              ),
+                              
+                              tags$div(
+                                style = "display: flex; flex-wrap: wrap;",
+                                tags$div(
+                                  style = "flex: 1; min-width: 300px; margin-right: 20px;",
+                                  tags$div(style = "background-color: white; border-radius: 5px; padding: 15px; min-height: 520px;",
+                                           tags$h4("Distribution in Alzheimer's Patients", style = "color: #2c3e50; text-align: center;"),
+                                           plotlyOutput("pie_chart", height = "550px")
+                                  )
+                                )
+                              )
+                     )
                    )
                  )
+                 
         )
       )  # end navbarPage
     )    # end mainPanel
@@ -981,50 +1054,276 @@ server = function(input, output, session) {
   #—— 5) Pie Charts ———————————————————————————————————————————————————
   
   filtered_pie = reactive({
-    df = alz_df
-    df = df |> filter(
-      Age >= input$pie_ageRange[1],
-      Age <= input$pie_ageRange[2]
-    )
-    if (input$pie_genderFilter != "All")
-      df = df |> filter(Gender == input$pie_genderFilter)
-    if (input$pie_countryFilter != "All")
-      df = df |> filter(Country == input$pie_countryFilter)
-    df
-  })
-  
-  output$pie_chart = renderPlotly({
-    var = input$pie_varChoice
-    df = filtered_pie()
-    
-    df_yes = df |> filter(`Alzheimer's Diagnosis`=="Yes") |>
-      group_by(.data[[var]]) |>
-      summarize(count = n(), .groups="drop") |>
-      filter(!is.na(.data[[var]]))
-    
-    df_no  = df |> filter(`Alzheimer's Diagnosis`=="No") |>
-      group_by(.data[[var]]) |>
-      summarize(count = n(), .groups="drop") |>
-      filter(!is.na(.data[[var]]))
-    
-    plot_ly() |>
-      add_pie(data = df_yes,
-              labels = ~get(var), values = ~count,
-              name = "AD = Yes",
-              domain = list(x = c(0, 0.45), y = c(0,1))) |>
-      add_pie(data = df_no,
-              labels = ~get(var), values = ~count,
-              name = "AD = No",
-              domain = list(x = c(0.55,1),y=c(0,1))) |>
-      layout(
-        title = paste("AD Diagnosis Pie Charts by", var),
-        showlegend = TRUE,
-        legend = list(orientation = "h"),
-        template = "plotly_dark"
+    df = alz_df |> 
+      mutate(
+        Diagnosis = `Alzheimer's Diagnosis`,
+        `Education Level (Binned)` = cut(`Education Level`,
+                                         breaks = c(-Inf, 4, 9, 14, Inf),
+                                         labels = c("Low", "Medium", "High", "Very High"),
+                                         right  = TRUE
+        ),
+        `BMI (Binned)` = cut(BMI,
+                             breaks = c(-Inf, 24.9, 29.9, Inf),
+                             labels = c("Normal", "Overweight", "Obese"),
+                             right = TRUE
+        ),
+        `Cognitive Score (Binned)` = cut(`Cognitive Test Score`,
+                                         breaks = c(-Inf, 46, 64, 82, Inf),
+                                         labels = c("Low", "Medium", "High", "Very High"),
+                                         right = TRUE
+        )
+      ) |> 
+      filter(
+        Age >= input$pie_ageRange[1],
+        Age <= input$pie_ageRange[2],
+        if (input$pie_genderFilter != "All") Gender == input$pie_genderFilter else TRUE,
+        if (input$pie_countryFilter != "All") Country == input$pie_countryFilter else TRUE
       )
+    return(df)
   })
   
-}
+  summary_data <- reactive({
+    df  <- filtered_pie()
+    req(input$pie_varChoice)
+    var <- input$pie_varChoice
+    
+    var_mapped <- dplyr::case_when(
+      var == "Education Level" ~ "Education Level (Binned)",
+      var == "BMI" ~ "BMI (Binned)",
+      var == "Cognitive Test Score" ~ "Cognitive Score (Binned)",
+      TRUE ~ as.character(var) 
+    )
+    
+    result <- df %>%
+      group_by(Diagnosis, .data[[var_mapped]]) %>%
+      summarise(Count = n(), .groups = "drop") %>%
+      filter(!is.na(.data[[var_mapped]])) %>%
+      group_by(Diagnosis) %>%
+      mutate(
+        Total = sum(Count),
+        Percentage = round(Count / Total * 100, 1)
+      ) %>%
+      ungroup()
+    
+    comparison <- result %>%
+      select(Diagnosis, !!as.name(var_mapped), Percentage) %>%
+      tidyr::pivot_wider(names_from = Diagnosis, values_from = Percentage) %>%
+      mutate(Difference = Yes - No) %>%
+      arrange(desc(abs(Difference)))
+    
+    yes_total <- sum(df$Diagnosis == "Yes", na.rm = TRUE)
+    no_total  <- sum(df$Diagnosis == "No",  na.rm = TRUE)
+    
+    list(
+      detail = result,
+      comparison = comparison,
+      yes_total = yes_total,
+      no_total = no_total,
+      yes_percent = round(yes_total / (yes_total + no_total) * 100, 1)
+    )
+  })
+  
+  # Key Insights panels
+  output$keyInsights <- renderUI({
+    data <- summary_data()
+    var  <- input$pie_varChoice 
+    overall_rate <- overall_rate_static 
+    
+    # Check if data is available for insights
+    if (nrow(data$comparison) == 0 || is.null(data$comparison) || all(is.na(data$comparison))) {
+      # Display counts and percentage if available, otherwise message
+      total_filtered = data$yes_total + data$no_total
+      content <- if (total_filtered > 0) {
+        tags$div(
+          tags$div( 
+            style = "display: flex; justify-content: space-between; margin-bottom: 15px;",
+            tags$div(
+              style = "flex: 1; text-align: center; background-color: #e8f4f8; padding: 10px; border-radius: 5px; margin-right: 10px;",
+              tags$h4(data$yes_total, style = "margin: 0; color: #2980b9;"),
+              tags$p("Alzheimer's Patients", style = "margin: 0;")
+            ),
+            tags$div(
+              style = "flex: 1; text-align: center; background-color: #f8f4e8; padding: 10px; border-radius: 5px;",
+              tags$h4(paste0(data$yes_percent, "%"), style = "margin: 0; color: #d35400;"),
+              tags$p("of Selected Population", style = "margin: 0;")
+            )
+          ),
+          tags$p("Insufficient data for the selected variable and filters to generate detailed insights.", style="text-align: center; font-style: italic; margin-top: 15px;")
+        )
+      } else {
+        tags$p("No individuals found matching the selected filters.", style="text-align: center; font-style: italic; margin-top: 15px;")
+      }
+      return(content)
+    }
+    
+    top_diff <- data$comparison[1, ]
+    
+    # Map variable name again for indexing
+    var_mapped <- dplyr::case_when(
+      var == "Education Level"       & "Education Level (Binned)" %in% names(data$comparison) ~ "Education Level (Binned)",
+      var == "BMI"                   & "BMI (Binned)" %in% names(data$comparison) ~ "BMI (Binned)",
+      var == "Cognitive Test Score"  & "Cognitive Score (Binned)" %in% names(data$comparison) ~ "Cognitive Score (Binned)",
+      TRUE ~ var
+    )
+    
+    raw_value <- top_diff[[var_mapped]]
+    
+    factor_value <- if (is.numeric(raw_value)) {paste0("level ", round(raw_value, 1)) # Use level for numeric/binned continuous
+    } else {
+      as.character(raw_value) # Use value for categorical
+    }
+    
+    yes_percent <- ifelse(is.na(top_diff[["Yes"]]) | !is.finite(top_diff[["Yes"]]), 0, top_diff[["Yes"]])
+    no_percent  <- ifelse(is.na(top_diff[["No"]]) | !is.finite(top_diff[["No"]]), 0, top_diff[["No"]])
+    difference  <- ifelse(is.na(top_diff[["Difference"]]) | !is.finite(top_diff[["Difference"]]), 0, top_diff[["Difference"]])
+    
+    direction   <- ifelse(difference > 0, "higher", "lower")
+    rel_diff    <- round(abs(difference), 1)
+    
+    # Format percentages for display
+    yes_percent_fmt <- paste0(round(yes_percent, 1), "%")
+    no_percent_fmt  <- paste0(round(no_percent, 1), "%")
+    
+    # Construct Key Finding sentence dynamically
+    key_finding_text <- if(rel_diff > 0) {
+      paste0("For the variable '", var, "', the group '", factor_value,
+             "' shows the largest percentage point difference. This group makes up ",
+             yes_percent_fmt, " of Alzheimer's patients compared to ", no_percent_fmt,
+             " of non-Alzheimer's patients in this selection (a ", rel_diff, " point difference).")
+    } else {
+      paste0("For the variable '", var, "', no significant percentage point difference was observed ",
+             "between Alzheimer's and non-Alzheimer's patients for any category within the selected population.")
+    }
+    
+    
+    # Construct Demographic label based on filters
+    demo_components <- c()
+    if (input$pie_genderFilter != "All") demo_components <- c(demo_components, input$genderFilter)
+    if (input$pie_genderFilter != "All") demo_components <- c(demo_components, input$countryFilter)
+    
+    # Always include age range
+    age_range_str <- paste0("age ", input$pie_ageRange[1], "–", input$pie_ageRange[2])
+    demo_components <- c(demo_components, age_range_str)
+    demo_label <- paste(demo_components, collapse = ", ")
+    
+    # Calculate comparison to overall rate
+    current_rate   <- data$yes_percent 
+    demo_change    <- round(current_rate - overall_rate, 1)
+    demo_direction <- ifelse(demo_change > 0, "higher than", ifelse(demo_change < 0, "lower than", "the same as"))
+    demo_abs       <- abs(demo_change)
+    
+    # Construct Demographic Insight sentence dynamically
+    demographic_insight_text <- paste0(
+      "The selected group (", demo_label, ") has an Alzheimer's diagnosis rate of ",
+      current_rate, "%. This is ", demo_abs, "% points ", demo_direction,
+      " the overall population's rate of ", overall_rate, "%."
+    )
+    
+    
+    # Render the UI 
+    tags$div(
+      # Top row: Counts and Percentage
+      tags$div(
+        style = "display: flex; justify-content: space-between; margin-bottom: 15px;",
+        tags$div(style = "flex: 1; text-align: center; background-color: #e8f4f8; padding: 10px; border-radius: 5px; margin-right: 10px;",
+                 tags$h4(data$yes_total, style = "margin: 0; color: #2980b9;"),
+                 tags$p("Alzheimer's Patients", style = "margin: 0;")
+        ),
+        tags$div(style = "flex: 1; text-align: center; background-color: #f8f4e8; padding: 10px; border-radius: 5px;",
+                 tags$h4(paste0(current_rate, "%"), style = "margin: 0; color: #d35400;"),
+                 tags$p("of Selected Population", style = "margin: 0;")
+        )
+      ),
+      # Bottom row: Insight Boxes
+      tags$div(style = "display: flex; gap: 10px; margin-bottom: 10px;",
+               tags$div(style = "flex: 1; background-color: white; padding: 15px; border-left: 4px solid #3498db;",
+                        tags$p(
+                          tags$strong("Key Finding:"), br(), 
+                          key_finding_text)
+               ),
+               tags$div(
+                 style = "flex: 1; background-color: white; padding: 15px; border-left: 4px solid #2ecc71;",
+                 tags$p(
+                   tags$strong("Demographic Insight:"), br(), 
+                   demographic_insight_text 
+                 )
+               )
+      )
+    ) 
+  }) 
+  output$pie_chart <- renderPlotly({
+    req(input$pie_varChoice)
+    var <- input$pie_varChoice
+    
+    var_mapped <- dplyr::case_when(
+      var == "Education Level" ~ "Education Level (Binned)",
+      var == "BMI" ~ "BMI (Binned)",
+      var == "Cognitive Test Score" ~ "Cognitive Score (Binned)",
+      TRUE ~ as.character(var) 
+    )
+    
+    df <- filtered_pie() %>% filter(!is.na(.data[[var_mapped]]))
+    
+    yes_df <- df %>%
+      filter(Diagnosis == "Yes") %>%
+      group_by(level = .data[[var_mapped]]) %>%   
+      summarise(n = n(), .groups = "drop")
+    no_df <- df %>%
+      filter(Diagnosis == "No") %>%
+      group_by(level = .data[[var_mapped]]) %>% 
+      summarise(n = n(), .groups = "drop")
+    
+    yes_cols <- colorRampPalette(c("#1f77b4", "#aec7e8"))(nrow(yes_df))
+    no_cols  <- colorRampPalette(c("#e74c3c", "#f5b7b1"))(nrow(no_df))
+    
+    plot_ly() %>%
+      add_pie(
+        data       = yes_df,
+        labels     = ~level,
+        values     = ~n,
+        name       = "Alzheimer's Yes",
+        marker     = list(colors = yes_cols,
+                          line   = list(color = "#FFFFFF", width = 1)),
+        textinfo     = "label+percent+value",
+        texttemplate = "%{label} (%{value})<br>%{percent}",
+        textposition = "auto",
+        hoverinfo  = "label+percent+value",
+        domain     = list(x = c(0, 1), y = c(0, 1)),
+        hole       = 0.6,
+        sort       = FALSE,
+        direction  = "clockwise",
+        textfont   = list(size = 18, color = 'black', family = 'Arial', weight = 'bold'),
+        outsidetextfont = list(size = 18, color = 'black', family = 'Arial', weight = 'bold')
+      ) %>%
+      add_pie(
+        data       = no_df,
+        labels     = ~level,
+        values     = ~n,
+        name       = "Alzheimer's No",
+        marker     = list(colors = no_cols,
+                          line   = list(color = "#FFFFFF", width = 1)),
+        textinfo     = "label+percent+value",
+        texttemplate = "%{label} (%{value})<br>%{percent}",
+        textposition   = "inside",
+        insidetextfont = list(size = 16, color = 'black', family = 'Arial', weight = 'bold'),
+        hoverinfo  = "label+percent+value",
+        domain     = list(x = c(0.23,0.77), y = c(0.23,0.77)),
+        hole       = 0.3,    
+        sort       = FALSE,
+        showlegend = FALSE
+      ) %>%
+      layout(
+        title = list(
+          text = paste(var, "Distribution (Outer: Alzheimer's, Inner: Non-Alzheimer's)"),
+          font = list(size = 16, family = 'Arial', weight = 'bold')
+        ),
+        showlegend = TRUE,
+        legend = list(orientation = "h", x = 0.5, y = -0.05, xanchor = "center",
+                      font = list(size = 15, family = 'Arial', weight = 'bold')),
+        margin = list(t = 50, b = 50, l = 0, r = 0),
+        uniformtext = list(minsize = 16, mode = 'show')
+      )
+  })}
 
 #── RUN APP ─────────────────────────────────────────────────────────────────
 
