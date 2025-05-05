@@ -191,7 +191,7 @@ ui = fluidPage(
   "))),
   
   sidebarLayout(
-    # ← persistent textbox on the left
+    # persistent textbox on the left
     sidebarPanel(
       wellPanel(
         tags$h4("Instructions"),
@@ -201,7 +201,7 @@ ui = fluidPage(
       width = 3
     ),
     
-    # → all your visualizations on the right
+    # all visualizations on the right
     mainPanel(
       width = 9,
       navbarPage(
@@ -387,7 +387,6 @@ ui = fluidPage(
             )
           )
         )
-        
       )  # end navbarPage
     )    # end mainPanel
   )      # end sidebarLayout
@@ -700,7 +699,7 @@ server = function(input, output, session) {
 
   #—— 4) Health Conditions Heatmap —————————————————————————————————————
 
-  selected_predictors = reactive({
+  selected_predictors <- reactive({
     c(input$physicalFactors, input$mentalFactors, input$lifestyleFactors, input$geneticFactors)
   })
   
@@ -731,32 +730,32 @@ server = function(input, output, session) {
     }
   })
   
-  filtered_data = reactive({
+  filtered_data <- reactive({
     if(input$country == "All Countries") {
-      data = alzheimers
+      data <- alzheimers
     } else {
-      data = alzheimers |> filter(Country == input$country)
+      data <- alzheimers %>% filter(Country == input$country)
     }
     return(data)
   })
 
-  heatmap_data = reactive({
-    alzheimers = filtered_data() |> 
+  heatmap_data <- reactive({
+    alzheimers <- filtered_data() %>% 
       filter(`Alzheimer's Diagnosis` == "Yes")
     if(nrow(alzheimers) == 0) {
       return(NULL)
     }
     
-    conditions = selected_predictors()
+    conditions <- selected_predictors()
     if(length(conditions) == 0) return(NULL)
     
-    combined_data = list()
+    combined_data <- list()
     
-    condition_map = list(
+    condition_map <- list(
       "Diabetes" = "Diabetes",
       "Hypertension" = "Hypertension",
       "Depression Level" = "Depression Level",
-      "Activity Level" = "Physical.Activity Level",
+      "Activity Level" = "Physical Activity Level",
       "Sleep Quality" = "Sleep Quality",
       "Social Engagement" = "Social Engagement Level",
       "Family History of Alzheimer's" = "Family History of Alzheimer's",
@@ -765,43 +764,44 @@ server = function(input, output, session) {
     
     for(condition in conditions) {
       if(condition %in% names(condition_map)) {
-        column_name = condition_map[[condition]]
-        temp = melt(table(alzheimers$Gender, alzheimers[[column_name]]))
-        colnames(temp) = c("Gender", "Condition", "Count")
-        temp$HealthFactor = condition
+        column_name <- condition_map[[condition]]
+        temp <- melt(table(alzheimers$Gender, alzheimers[[column_name]]))
+        colnames(temp) <- c("Gender", "Condition", "Count")
+        temp$HealthFactor <- condition
         
         if(input$normalizeCounts) {
-          total_by_gender = temp |>
-            group_by(Gender, HealthFactor) |>
+          total_by_gender <- temp %>%
+            group_by(Gender, HealthFactor) %>%
             summarize(Total = sum(Count), .groups = "drop")
           
-          temp = temp |>
-            left_join(total_by_gender, by = c("Gender", "HealthFactor")) |>
-            mutate(Count = (Count / Total) * 100) |>
+          temp <- temp %>%
+            left_join(total_by_gender, by = c("Gender", "HealthFactor")) %>%
+            mutate(Count = (Count / Total) * 100) %>%
             select(-Total)
         }
         
-        combined_data[[length(combined_data)+1]] = temp
+        combined_data[[length(combined_data)+1]] <- temp
       }
     }
     
     if (length(combined_data) == 0) return(NULL)
     
-    heatmap_data = do.call(rbind, combined_data)
+    heatmap_data <- do.call(rbind, combined_data)
     
-    heatmap_data$HealthFactor = factor(heatmap_data$HealthFactor, levels = conditions)
+    heatmap_data$HealthFactor <- factor(heatmap_data$HealthFactor, levels = conditions)
+
+    heatmap_data$Condition <- as.character(heatmap_data$Condition)
+
+    heatmap_data$Condition <- ifelse(
+      heatmap_data$Condition %in% c("Yes", "High", "Good"), "+", "-")
     
-    if(any(grepl("Level|Quality", heatmap_data$Condition))) {
-      level_order = c("Low", "Medium", "High")
-      heatmap_data$Condition = factor(heatmap_data$Condition, 
-                                     levels = c("No", "Yes", level_order))
-    }
-    
+    heatmap_data$Condition <- factor(heatmap_data$Condition, levels = c("-", "+"))
+
     return(heatmap_data)
   })
   
-  output$heatmap = renderPlot({
-    data = heatmap_data()
+  output$heatmap <- renderPlot({
+    data <- heatmap_data()
     if (is.null(data) || nrow(data) == 0) {
       return(ggplot() + 
                annotate("text", x = 0.5, y = 0.5, 
@@ -811,52 +811,52 @@ server = function(input, output, session) {
                ylim(0, 1))
     }
     
-    color_scheme = input$colorScheme
+    color_scheme <- input$colorScheme
     if(color_scheme == "colorblind") {
-      male_colors = scale_fill_gradient(low = "#E6F0FF", high = "#0072B2", 
+      male_colors <- scale_fill_gradient(low = "#E6F0FF", high = "#0072B2", 
                                        name = if(input$normalizeCounts) "% of Male Cases" else "Male Cases")
-      female_colors = scale_fill_gradient(low = "#FFE6E6", high = "#D55E00", 
+      female_colors <- scale_fill_gradient(low = "#FFE6E6", high = "#D55E00", 
                                          name = if(input$normalizeCounts) "% of Female Cases" else "Female Cases")
     } else if(color_scheme == "sequential") {
-      male_colors = scale_fill_gradient(low = "#E6E6FF", high = "#3333CC", 
+      male_colors <- scale_fill_gradient(low = "#E6E6FF", high = "#3333CC", 
                                        name = if(input$normalizeCounts) "% of Male Cases" else "Male Cases")
-      female_colors = scale_fill_gradient(low = "#F2E6FF", high = "#8B00CC", 
+      female_colors <- scale_fill_gradient(low = "#F2E6FF", high = "#8B00CC", 
                                          name = if(input$normalizeCounts) "% of Female Cases" else "Female Cases")
     } else {
-      male_colors = scale_fill_gradient2(low = "#4575B4", mid = "#FFFFBF", high = "#D73027", 
+      male_colors <- scale_fill_gradient2(low = "#4575B4", mid = "#FFFFBF", high = "#D73027", 
                                         midpoint = median(data$Count[data$Gender == "Male"]), 
                                         name = if(input$normalizeCounts) "% of Male Cases" else "Male Cases")
-      female_colors = scale_fill_gradient2(low = "#4575B4", mid = "#FFFFBF", high = "#D73027", 
+      female_colors <- scale_fill_gradient2(low = "#4575B4", mid = "#FFFFBF", high = "#D73027", 
                                           midpoint = median(data$Count[data$Gender == "Female"]), 
                                           name = if(input$normalizeCounts) "% of Female Cases" else "Female Cases")
     }
     
-    male_data = data |> filter(Gender == "Male")
-    female_data = data |> filter(Gender == "Female")
+    male_data <- data %>% filter(Gender == "Male")
+    female_data <- data %>% filter(Gender == "Female")
     
     if(input$showLabels) {
-      male_labels = geom_text(data = male_data, 
+      male_labels <- geom_text(data = male_data, 
                               aes(x = Condition, y = HealthFactor, 
                                   label = if(input$normalizeCounts) 
                                     sprintf("%.1f%%", Count) else 
                                     as.character(Count)), 
                               color = "black", size = 3.5)
       
-      female_labels = geom_text(data = female_data, 
+      female_labels <- geom_text(data = female_data, 
                                 aes(x = Condition, y = HealthFactor, 
                                     label = if(input$normalizeCounts) 
                                       sprintf("%.1f%%", Count) else 
                                       as.character(Count)), 
                                 color = "black", size = 3.5)
     } else {
-      male_labels = NULL
-      female_labels = NULL
+      male_labels <- NULL
+      female_labels <- NULL
     }
     
-    title = paste("Alzheimer's Cases by Gender and Health Conditions", 
+    title <- paste("Alzheimer's Cases by Gender and Health Conditions", 
                  if (input$country != "All Countries") paste("in", input$country) else "")
 
-    subtitle = if(input$normalizeCounts) {
+    subtitle <- if(input$normalizeCounts) {
       "Values shown as percentages within each gender group"
     } else {
       "Values show actual case counts"
@@ -891,7 +891,7 @@ server = function(input, output, session) {
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
         axis.text.y = element_text(size = 11, face = "bold"),
-        axis.text.x = element_text(size = 10),
+        axis.text.x = element_text(size = 28),
         strip.text = element_text(size = 12, face = "bold"),
         plot.title = element_text(hjust = 0.5, face = "bold", size = 16),
         plot.subtitle = element_text(hjust = 0.5, size = 11, color = "#666666"),
