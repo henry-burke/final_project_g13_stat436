@@ -1,17 +1,4 @@
----
-title: "g13_milestone_3"
-author: "Henry Burke, Beomseong Kim, Jack Vaughn, John Derr, Sanjay Nagarimadugu"
-output: rmdformats::downcute
----
-
-# Full Interface
-- All original code below
-
-``` {r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-```
-
-```{r}
 library(shiny)
 library(shinyjs)
 library(tidyverse)
@@ -113,8 +100,8 @@ addAlzheimersLegend = function(map) {
         "<div style='display:flex;align-items:center;'>",
         "<svg width='", sizes*2, "' height='", sizes*2, "'>",
         "<circle cx='", sizes, "' cy='", sizes, "' r='", sizes,
-          "' fill='", colors, "' fill-opacity='", opacity,
-          "' stroke='black' stroke-width='1'/>",
+        "' fill='", colors, "' fill-opacity='", opacity,
+        "' stroke='black' stroke-width='1'/>",
         "</svg>",
         "<span style='margin-left:6px;'>", labels, "</span>",
         "</div>",
@@ -217,207 +204,207 @@ ui = fluidPage(
         
         # 1) Global Map (Sanjay)
         tabPanel("Global Map",
-          leafletOutput("global_map", height = "600px")
+                 leafletOutput("global_map", height = "600px")
         ),
         
         # 2) Happiness vs AD (Henry)
         tabPanel("Happiness vs Alzheimer's Diagnosis",
-          wellPanel(
-            "This scatterplot shows how the World Happiness Index (score from 1-10 denoting how happy
+                 wellPanel(
+                   "This scatterplot shows how the World Happiness Index (score from 1-10 denoting how happy
              a country's general population is) for each country relates to the number of 
              Alzheimer's diagnoses. Hover over a point to see the exact
              country and values, and brush to select multiple countries below."
-          ),
-          
-          fluidRow(
-            column(
-              width = 8,
-              div(
-                style = "position: relative; overflow: visible;",
-                plotOutput(
-                  "scatter",
-                  hover = hoverOpts("plot_hover", delay = 50, delayType = "throttle"),
-                  brush = brushOpts("plot_brush", resetOnNew = TRUE)
-                ),
-                uiOutput("tooltip")
-              )
-            ),
-            column(
-              width = 4,
-              h4("Selected countries"),
-              reactableOutput("brush_info")
-            )
-          )
+                 ),
+                 
+                 fluidRow(
+                   column(
+                     width = 8,
+                     div(
+                       style = "position: relative; overflow: visible;",
+                       plotOutput(
+                         "scatter",
+                         hover = hoverOpts("plot_hover", delay = 50, delayType = "throttle"),
+                         brush = brushOpts("plot_brush", resetOnNew = TRUE)
+                       ),
+                       uiOutput("tooltip")
+                     )
+                   ),
+                   column(
+                     width = 4,
+                     h4("Selected countries"),
+                     reactableOutput("brush_info")
+                   )
+                 )
         ),
         
         # 3) Correlation Explorer (John)
         tabPanel("Correlation Explorer",
-          sidebarLayout(
-            sidebarPanel(
-              tabsetPanel(
-                id = "sidebar_tabs",
-                
-                tabPanel("Explorer",
-                  selectInput("corr_xvar", "X Variable:", choices = NULL),
-                  selectInput("corr_yvar", "Y Variable:", choices = NULL),
-                  radioButtons("corr_summary_metric", "Summary Metric:",
-                    choices = c("Alzheimer's Percentage" = "alz_pct",
-                                "Average Age"            = "avg_age",
-                                "Count"                  = "count"),
-                    selected = "alz_pct"
-                  ),
-                  sliderInput("corr_bin_count", "Number of Groups:",
-                    min = 2, max = 20, value = 10
-                  ),
-                  checkboxInput("corr_show_other", "Show 'Other' Category for Country",
-                    value = FALSE, width = "100%"
-                  )
-                ),
-                
-                tabPanel("Filters",
-                  sliderInput("corr_age_range", "Age Range:",
-                    min = 20, max = 100, value = c(20, 100)
-                  ),
-                  selectInput("corr_gender", "Gender:",
-                    choices = c("All", "Male", "Female")
-                  ),
-                  selectInput("corr_diagnosis", "Alzheimer's Diagnosis:",
-                    choices = c("All", "Yes", "No")
-                  )
-                )
-              ),
-              
-              actionButton("corr_apply_filters", "Apply Filters",
-                class = "btn-primary",
-                style = "margin-top:10px; width:100%;"
-              )
-            ),
-            
-            mainPanel(
-              plotlyOutput("corr_plot",       height = "500px"),
-              htmlOutput  ("corr_explanation")
-            )
-          )
+                 sidebarLayout(
+                   sidebarPanel(
+                     tabsetPanel(
+                       id = "sidebar_tabs",
+                       
+                       tabPanel("Explorer",
+                                selectInput("corr_xvar", "X Variable:", choices = NULL),
+                                selectInput("corr_yvar", "Y Variable:", choices = NULL),
+                                radioButtons("corr_summary_metric", "Summary Metric:",
+                                             choices = c("Alzheimer's Percentage" = "alz_pct",
+                                                         "Average Age"            = "avg_age",
+                                                         "Count"                  = "count"),
+                                             selected = "alz_pct"
+                                ),
+                                sliderInput("corr_bin_count", "Number of Groups:",
+                                            min = 2, max = 20, value = 10
+                                ),
+                                checkboxInput("corr_show_other", "Show 'Other' Category for Country",
+                                              value = FALSE, width = "100%"
+                                )
+                       ),
+                       
+                       tabPanel("Filters",
+                                sliderInput("corr_age_range", "Age Range:",
+                                            min = 20, max = 100, value = c(20, 100)
+                                ),
+                                selectInput("corr_gender", "Gender:",
+                                            choices = c("All", "Male", "Female")
+                                ),
+                                selectInput("corr_diagnosis", "Alzheimer's Diagnosis:",
+                                            choices = c("All", "Yes", "No")
+                                )
+                       )
+                     ),
+                     
+                     actionButton("corr_apply_filters", "Apply Filters",
+                                  class = "btn-primary",
+                                  style = "margin-top:10px; width:100%;"
+                     )
+                   ),
+                   
+                   mainPanel(
+                     plotlyOutput("corr_plot",       height = "500px"),
+                     htmlOutput  ("corr_explanation")
+                   )
+                 )
         ),
         
         # 4) Health Conditions Heatmap (Jack)
         tabPanel("Health Heatmap",
-          sidebarLayout(
-            sidebarPanel(
-              selectInput("country", "Select Country:", 
-                          choices = country_choices,
-                          selected = "All Countries"),
-              
-              div(
-                h4("Select Health Factors:"),
-                div(
-                  style = "background-color: #f9f9f9; padding: 10px; margin-bottom: 10px; border-radius: 5px;",
-                  h5("Physical Health Factors", style = "margin-top: 0;"),
-                  checkboxInput("selectAllPhysical", "Select All Physical Factors", FALSE),
-                  checkboxGroupInput("physicalFactors", NULL,
-                                    choices = c(
-                                      "Diabetes",
-                                      "Hypertension"
-                                    ),
-                                    selected = c("Diabetes"))
-                ),
-                
-                div(
-                  style = "background-color: #f9f9f9; padding: 10px; margin-bottom: 10px; border-radius: 5px;",
-                  h5("Mental Health Factors", style = "margin-top: 0;"),
-                  checkboxInput("selectAllMental", "Select All Mental Factors", FALSE),
-                  checkboxGroupInput("mentalFactors", NULL,
-                                    choices = c(
-                                      "Depression Level",
-                                      "Stress Level"
-                                    ),
-                                    selected = c("Depression Level"))
-                ),
-        
-                div(
-                  style = "background-color: #f9f9f9; padding: 10px; margin-bottom: 10px; border-radius: 5px;",
-                  h5("Lifestyle Factors", style = "margin-top: 0;"),
-                  checkboxInput("selectAllLifestyle", "Select All Lifestyle Factors", FALSE),
-                  checkboxGroupInput("lifestyleFactors", NULL,
-                                    choices = c(
-                                      "Activity Level",
-                                      "Sleep Quality",
-                                      "Social Engagement"
-                                    ),
-                                    selected = c())
-                ),
-                
-                div(
-                  style = "background-color: #f9f9f9; padding: 10px; margin-bottom: 10px; border-radius: 5px;",
-                  h5("Genetic Factors", style = "margin-top: 0;"),
-                  checkboxGroupInput("geneticFactors", NULL,
-                                    choices = c(
-                                      "Family History of Alzheimer's"
-                                    ),
-                                    selected = c())
-                )
-              ),
-              
-              div(
-                style = "border-top: 1px solid #eee; padding-top: 10px; margin-top: 10px;",
-                h4("Advanced Options:"),
-                selectInput("colorScheme", "Color Scheme:",
-                           choices = c("Blue/Red (Colorblind Friendly)" = "colorblind",
-                                      "Sequential Blues/Purples" = "sequential",
-                                      "Diverging" = "diverging"),
-                           selected = "colorblind"),
-                checkboxInput("showLabels", "Show Value Labels", TRUE),
-                checkboxInput("normalizeCounts", "Normalize Counts (%)", FALSE)
-              )
-            ),
-            
-            mainPanel(
-              br(),
-              plotOutput("heatmap", height = "600px"),
-              br(),
-              div(id = "legend-key",
-                  style = "background-color: #f9f9f9; padding: 15px; border-radius: 5px;",
-                  h4("How to Interpret:"),
-                  p("Each tile represents the number of Alzheimer's cases associated with a specific factor."),
-                  p("• Y-axis: Selected health factors"),
-                  p("• X-axis: Status of each condition (Yes/No or High/Low)"),
-                  p("• Color intensity: Darker colors indicate higher number of cases")
-              )
-            )
-          )
+                 sidebarLayout(
+                   sidebarPanel(
+                     selectInput("country", "Select Country:", 
+                                 choices = country_choices,
+                                 selected = "All Countries"),
+                     
+                     div(
+                       h4("Select Health Factors:"),
+                       div(
+                         style = "background-color: #f9f9f9; padding: 10px; margin-bottom: 10px; border-radius: 5px;",
+                         h5("Physical Health Factors", style = "margin-top: 0;"),
+                         checkboxInput("selectAllPhysical", "Select All Physical Factors", FALSE),
+                         checkboxGroupInput("physicalFactors", NULL,
+                                            choices = c(
+                                              "Diabetes",
+                                              "Hypertension"
+                                            ),
+                                            selected = c("Diabetes"))
+                       ),
+                       
+                       div(
+                         style = "background-color: #f9f9f9; padding: 10px; margin-bottom: 10px; border-radius: 5px;",
+                         h5("Mental Health Factors", style = "margin-top: 0;"),
+                         checkboxInput("selectAllMental", "Select All Mental Factors", FALSE),
+                         checkboxGroupInput("mentalFactors", NULL,
+                                            choices = c(
+                                              "Depression Level",
+                                              "Stress Level"
+                                            ),
+                                            selected = c("Depression Level"))
+                       ),
+                       
+                       div(
+                         style = "background-color: #f9f9f9; padding: 10px; margin-bottom: 10px; border-radius: 5px;",
+                         h5("Lifestyle Factors", style = "margin-top: 0;"),
+                         checkboxInput("selectAllLifestyle", "Select All Lifestyle Factors", FALSE),
+                         checkboxGroupInput("lifestyleFactors", NULL,
+                                            choices = c(
+                                              "Activity Level",
+                                              "Sleep Quality",
+                                              "Social Engagement"
+                                            ),
+                                            selected = c())
+                       ),
+                       
+                       div(
+                         style = "background-color: #f9f9f9; padding: 10px; margin-bottom: 10px; border-radius: 5px;",
+                         h5("Genetic Factors", style = "margin-top: 0;"),
+                         checkboxGroupInput("geneticFactors", NULL,
+                                            choices = c(
+                                              "Family History of Alzheimer's"
+                                            ),
+                                            selected = c())
+                       )
+                     ),
+                     
+                     div(
+                       style = "border-top: 1px solid #eee; padding-top: 10px; margin-top: 10px;",
+                       h4("Advanced Options:"),
+                       selectInput("colorScheme", "Color Scheme:",
+                                   choices = c("Blue/Red (Colorblind Friendly)" = "colorblind",
+                                               "Sequential Blues/Purples" = "sequential",
+                                               "Diverging" = "diverging"),
+                                   selected = "colorblind"),
+                       checkboxInput("showLabels", "Show Value Labels", TRUE),
+                       checkboxInput("normalizeCounts", "Normalize Counts (%)", FALSE)
+                     )
+                   ),
+                   
+                   mainPanel(
+                     br(),
+                     plotOutput("heatmap", height = "600px"),
+                     br(),
+                     div(id = "legend-key",
+                         style = "background-color: #f9f9f9; padding: 15px; border-radius: 5px;",
+                         h4("How to Interpret:"),
+                         p("Each tile represents the number of Alzheimer's cases associated with a specific factor."),
+                         p("• Y-axis: Selected health factors"),
+                         p("• X-axis: Status of each condition (Yes/No or High/Low)"),
+                         p("• Color intensity: Darker colors indicate higher number of cases")
+                     )
+                   )
+                 )
         ),
         
         # 5) Diagnosis Pie Charts (Beomseong)
         tabPanel("Pie Charts",
-          sidebarLayout(
-            sidebarPanel(
-              sliderInput("pie_ageRange", "Age Range:",
-                min   = floor(min(alz_df$Age, na.rm = TRUE)),
-                max   = ceiling(max(alz_df$Age, na.rm = TRUE)),
-                value = c(50, 90)
-              ),
-              selectInput("pie_genderFilter", "Gender:",
-                choices = c("All", unique(alz_df$Gender)),
-                selected = "All"
-              ),
-              selectInput("pie_countryFilter", "Country:",
-                choices = c("All", unique(alz_df$Country)),
-                selected = "All"
-              ),
-              selectInput("pie_varChoice", "Variable to Analyze:",
-                choices = c(
-                  "Physical Activity Level", "Smoking Status",
-                  "Alcohol Consumption", "Diabetes", "Hypertension",
-                  "Cholesterol Level", "Family History of Alzheimer’s",
-                  "Genetic Risk Factor (APOE-ε4 allele)", "Stress Levels"
-                ),
-                selected = "Physical Activity Level"
-              )
-            ),
-            mainPanel(
-              plotlyOutput("pie_chart")
-            )
-          )
+                 sidebarLayout(
+                   sidebarPanel(
+                     sliderInput("pie_ageRange", "Age Range:",
+                                 min   = floor(min(alz_df$Age, na.rm = TRUE)),
+                                 max   = ceiling(max(alz_df$Age, na.rm = TRUE)),
+                                 value = c(50, 90)
+                     ),
+                     selectInput("pie_genderFilter", "Gender:",
+                                 choices = c("All", unique(alz_df$Gender)),
+                                 selected = "All"
+                     ),
+                     selectInput("pie_countryFilter", "Country:",
+                                 choices = c("All", unique(alz_df$Country)),
+                                 selected = "All"
+                     ),
+                     selectInput("pie_varChoice", "Variable to Analyze:",
+                                 choices = c(
+                                   "Physical Activity Level", "Smoking Status",
+                                   "Alcohol Consumption", "Diabetes", "Hypertension",
+                                   "Cholesterol Level", "Family History of Alzheimer’s",
+                                   "Genetic Risk Factor (APOE-ε4 allele)", "Stress Levels"
+                                 ),
+                                 selected = "Physical Activity Level"
+                     )
+                   ),
+                   mainPanel(
+                     plotlyOutput("pie_chart")
+                   )
+                 )
         )
       )  # end navbarPage
     )    # end mainPanel
@@ -429,13 +416,13 @@ ui = fluidPage(
 #── SERVER ───────────────────────────────────────────────────────────────────
 
 server = function(input, output, session) {
-
+  
   #—— 1) Render Leaflet Map —————————————————————————————————————————————
   output$global_map = renderLeaflet({
     leaflet() |>
       addTiles() |>
       setView(lng = 0, lat = 20, zoom = 2) |>
-
+      
       # Diabetes fill
       addPolygons(
         data       = map_data,
@@ -454,7 +441,7 @@ server = function(input, output, session) {
         ),
         group = "Diabetes Rate"
       ) |>
-
+      
       # Age fill
       addPolygons(
         data       = map_data,
@@ -472,7 +459,7 @@ server = function(input, output, session) {
         ),
         group = "Average Age"
       ) |>
-
+      
       # Alzheimer's circles
       addCircleMarkers(
         data       = circles_data,
@@ -486,17 +473,17 @@ server = function(input, output, session) {
         ),
         group = c("Diabetes Rate","Average Age")
       ) |>
-
+      
       addLayersControl(
         baseGroups = c("Diabetes Rate","Average Age"),
         options    = layersControlOptions(collapsed = FALSE)
       ) |>
-
+      
       addAlzheimersLegend() |>
       addControl(instructions_html, position = "topleft") |>
       addControl(diabetes_legend,  position = "bottomright") |>
       addControl(age_legend,       position = "bottomright") |>
-
+      
       onRender("
         function(el,x) {
           var dL = document.getElementById('diabetes-legend'),
@@ -515,8 +502,8 @@ server = function(input, output, session) {
         }
       ")
   })
-
-
+  
+  
   #—— 2) Happiness vs AD Scatter —————————————————————————————————————
   # 1) render the scatterplot
   output$scatter <- renderPlot({
@@ -594,28 +581,28 @@ server = function(input, output, session) {
       striped = TRUE
     )
   })
-
-
+  
+  
   #—— 3) Correlation Explorer ————————————————————————————————————————
-
+  
   # helper for binning (John’s function)
   create_bins = function(var, var_name, n_bins, show_other) {
     if (is.numeric(var)) {
       breaks = quantile(var, probs = seq(0,1,length.out=n_bins+1),
-                         na.rm = TRUE)
+                        na.rm = TRUE)
       breaks = unique(breaks)
       if (length(breaks) <= 1) {
         return(factor(rep(paste0("Value: ",
-           format(unique(na.omit(var))[1],digits=3)),
-           length(var))))
+                                 format(unique(na.omit(var))[1],digits=3)),
+                          length(var))))
       }
       if (length(breaks)==2 && length(unique(na.omit(var)))>1) {
         breaks = seq(min(var,na.rm=TRUE), max(var,na.rm=TRUE),
-                      length.out = n_bins+1) |> unique()
+                     length.out = n_bins+1) |> unique()
         if (length(breaks)<=1) {
           return(factor(rep(paste0("Value: ",
-            format(unique(na.omit(var))[1],digits=3)),
-            length(var))))
+                                   format(unique(na.omit(var))[1],digits=3)),
+                            length(var))))
         }
       }
       cut(var, breaks=breaks, include.lowest=TRUE, dig.lab=3)
@@ -648,37 +635,37 @@ server = function(input, output, session) {
       }
     }
   }
-
+  
   # initial variable choices
   observe({
     cols = names(alz_df)
     sel_x = if ("Age" %in% cols) "Age" else cols[1]
     sel_y = if ("Cognitive Test Score" %in% cols)
-               "Cognitive Test Score" else cols[min(2,length(cols))]
+      "Cognitive Test Score" else cols[min(2,length(cols))]
     updateSelectInput(session, "corr_xvar",
-      choices = cols, selected = sel_x)
+                      choices = cols, selected = sel_x)
     updateSelectInput(session, "corr_yvar",
-      choices = cols, selected = sel_y)
+                      choices = cols, selected = sel_y)
   })
-
+  
   # age slider
   observe({
     rng = range(alz_df$Age, na.rm=TRUE)
     updateSliderInput(session, "corr_age_range",
-      min = floor(rng[1]), max = ceiling(rng[2]),
-      value = c(floor(rng[1]), ceiling(rng[2])))
+                      min = floor(rng[1]), max = ceiling(rng[2]),
+                      value = c(floor(rng[1]), ceiling(rng[2])))
   })
-
+  
   # toggle show_other
   observe({
     needs = input$corr_xvar=="Country" ||
-             input$corr_yvar=="Country"
+      input$corr_yvar=="Country"
     toggleState("corr_show_other", needs)
     if (!needs) {
       updateCheckboxInput(session, "corr_show_other", value = FALSE)
     }
   })
-
+  
   # filtered data event
   filtered_corr = eventReactive(input$corr_apply_filters, {
     df = alz_df
@@ -692,27 +679,27 @@ server = function(input, output, session) {
       df = df |> filter(`Alzheimer's Diagnosis` == input$corr_diagnosis)
     df
   }, ignoreNULL = FALSE)
-
+  
   # aggregation
   summary_corr = reactive({
     df = filtered_corr()
     req(nrow(df) > 0)
-
+    
     x_var = input$corr_xvar
     y_var = input$corr_yvar
-
+    
     x_bins = create_bins(df[[x_var]], x_var,
-                          input$corr_bin_count,
-                          input$corr_show_other)
+                         input$corr_bin_count,
+                         input$corr_show_other)
     y_bins = create_bins(df[[y_var]], y_var,
-                          input$corr_bin_count,
-                          input$corr_show_other)
-
+                         input$corr_bin_count,
+                         input$corr_show_other)
+    
     bdf = df |> mutate(
       x_binned = x_bins,
       y_binned = y_bins
     ) |> drop_na(x_binned, y_binned)
-
+    
     bdf |> group_by(x_binned, y_binned, .drop=FALSE) |>
       summarize(
         count     = n(),
@@ -722,11 +709,11 @@ server = function(input, output, session) {
         .groups = "drop"
       ) |> filter(count>0)
   })
-
+  
   output$corr_plot = renderPlotly({
     df = summary_corr()
     var = input$corr_summary_metric
-
+    
     if (var=="alz_pct") {
       title = paste("Alzheimer's % by", input$corr_xvar, "vs", input$corr_yvar)
       scale_fill = scale_fill_gradient(
@@ -735,25 +722,25 @@ server = function(input, output, session) {
     } else if (var=="avg_age") {
       title = paste("Avg Age by", input$corr_xvar, "vs", input$corr_yvar)
       scale_fill = scale_fill_viridis_c(option="viridis",
-        name="Avg Age")
+                                        name="Avg Age")
     } else {
       title = paste("Count by", input$corr_xvar, "vs", input$corr_yvar)
       scale_fill = scale_fill_viridis_c(option="plasma",
-        name="Count", trans="sqrt")
+                                        name="Count", trans="sqrt")
     }
-
+    
     p = ggplot(df, aes(
-        x = x_binned, y = y_binned,
-        fill = .data[[var]],
-        text = paste0(
-          input$corr_xvar, ": ", x_binned,
-          "<br>", input$corr_yvar, ": ", y_binned,
-          "<br>",
-          if(var=="alz_pct") paste0("Alz %: ", round(alz_pct,1),"%")
-          else if(var=="avg_age") paste0("Avg Age: ", round(avg_age,1))
-          else paste0("Count: ", count)
-        )
-      )) +
+      x = x_binned, y = y_binned,
+      fill = .data[[var]],
+      text = paste0(
+        input$corr_xvar, ": ", x_binned,
+        "<br>", input$corr_yvar, ": ", y_binned,
+        "<br>",
+        if(var=="alz_pct") paste0("Alz %: ", round(alz_pct,1),"%")
+        else if(var=="avg_age") paste0("Avg Age: ", round(avg_age,1))
+        else paste0("Count: ", count)
+      )
+    )) +
       geom_point(shape=21, size=7, alpha=0.8) +
       labs(title=title, x=input$corr_xvar, y=input$corr_yvar) +
       theme_minimal() +
@@ -764,16 +751,16 @@ server = function(input, output, session) {
       ) +
       scale_fill + scale_size(range=c(2,10)) +
       guides(size="none")
-
+    
     ggplotly(p, tooltip="text") |>
       layout(margin=list(b=100,l=100))
   })
-
+  
   output$corr_explanation = renderUI({
     metric = switch(input$corr_summary_metric,
-      alz_pct = "the % with Alzheimer's",
-      avg_age = "the average age",
-      count   = "the number of people (sqrt scale)"
+                    alz_pct = "the % with Alzheimer's",
+                    avg_age = "the average age",
+                    count   = "the number of people (sqrt scale)"
     )
     HTML(paste0(
       "<p>This bubble chart groups by ", input$corr_xvar,
@@ -781,10 +768,10 @@ server = function(input, output, session) {
       metric, ".</p><p>Hover for details.</p>"
     ))
   })
-
-
+  
+  
   #—— 4) Health Conditions Heatmap —————————————————————————————————————
-
+  
   selected_predictors <- reactive({
     c(input$physicalFactors, input$mentalFactors, input$lifestyleFactors, input$geneticFactors)
   })
@@ -792,7 +779,7 @@ server = function(input, output, session) {
   observeEvent(input$selectAllPhysical, {
     if(input$selectAllPhysical) {
       updateCheckboxGroupInput(session, "physicalFactors", 
-                              selected = c("Diabetes", "Hypertension"))
+                               selected = c("Diabetes", "Hypertension"))
     } else {
       updateCheckboxGroupInput(session, "physicalFactors", selected = c())
     }
@@ -801,7 +788,7 @@ server = function(input, output, session) {
   observeEvent(input$selectAllMental, {
     if(input$selectAllMental) {
       updateCheckboxGroupInput(session, "mentalFactors", 
-                              selected = c("Depression Level", "Stress Level"))
+                               selected = c("Depression Level", "Stress Level"))
     } else {
       updateCheckboxGroupInput(session, "mentalFactors", selected = c())
     }
@@ -810,7 +797,7 @@ server = function(input, output, session) {
   observeEvent(input$selectAllLifestyle, {
     if(input$selectAllLifestyle) {
       updateCheckboxGroupInput(session, "lifestyleFactors", 
-                              selected = c("Activity Level", "Sleep Quality", "Social Engagement"))
+                               selected = c("Activity Level", "Sleep Quality", "Social Engagement"))
     } else {
       updateCheckboxGroupInput(session, "lifestyleFactors", selected = c())
     }
@@ -824,7 +811,7 @@ server = function(input, output, session) {
     }
     return(data)
   })
-
+  
   heatmap_data <- reactive({
     alzheimers <- filtered_data() %>% 
       filter(`Alzheimer's Diagnosis` == "Yes")
@@ -875,14 +862,14 @@ server = function(input, output, session) {
     heatmap_data <- do.call(rbind, combined_data)
     
     heatmap_data$HealthFactor <- factor(heatmap_data$HealthFactor, levels = conditions)
-
+    
     heatmap_data$Condition <- as.character(heatmap_data$Condition)
-
+    
     heatmap_data$Condition <- ifelse(
       heatmap_data$Condition %in% c("Yes", "High", "Good"), "+", "-")
     
     heatmap_data$Condition <- factor(heatmap_data$Condition, levels = c("-", "+"))
-
+    
     return(heatmap_data)
   })
   
@@ -891,7 +878,7 @@ server = function(input, output, session) {
     if (is.null(data) || nrow(data) == 0) {
       return(ggplot() + 
                annotate("text", x = 0.5, y = 0.5, 
-                       label = "Please select at least one health condition to display") +
+                        label = "Please select at least one health condition to display") +
                theme_void() +
                xlim(0, 1) + 
                ylim(0, 1))
@@ -900,21 +887,21 @@ server = function(input, output, session) {
     color_scheme <- input$colorScheme
     if(color_scheme == "colorblind") {
       male_colors <- scale_fill_gradient(low = "#E6F0FF", high = "#0072B2", 
-                                       name = if(input$normalizeCounts) "% of Male Cases" else "Male Cases")
+                                         name = if(input$normalizeCounts) "% of Male Cases" else "Male Cases")
       female_colors <- scale_fill_gradient(low = "#FFE6E6", high = "#D55E00", 
-                                         name = if(input$normalizeCounts) "% of Female Cases" else "Female Cases")
+                                           name = if(input$normalizeCounts) "% of Female Cases" else "Female Cases")
     } else if(color_scheme == "sequential") {
       male_colors <- scale_fill_gradient(low = "#E6E6FF", high = "#3333CC", 
-                                       name = if(input$normalizeCounts) "% of Male Cases" else "Male Cases")
+                                         name = if(input$normalizeCounts) "% of Male Cases" else "Male Cases")
       female_colors <- scale_fill_gradient(low = "#F2E6FF", high = "#8B00CC", 
-                                         name = if(input$normalizeCounts) "% of Female Cases" else "Female Cases")
+                                           name = if(input$normalizeCounts) "% of Female Cases" else "Female Cases")
     } else {
       male_colors <- scale_fill_gradient2(low = "#4575B4", mid = "#FFFFBF", high = "#D73027", 
-                                        midpoint = median(data$Count[data$Gender == "Male"]), 
-                                        name = if(input$normalizeCounts) "% of Male Cases" else "Male Cases")
+                                          midpoint = median(data$Count[data$Gender == "Male"]), 
+                                          name = if(input$normalizeCounts) "% of Male Cases" else "Male Cases")
       female_colors <- scale_fill_gradient2(low = "#4575B4", mid = "#FFFFBF", high = "#D73027", 
-                                          midpoint = median(data$Count[data$Gender == "Female"]), 
-                                          name = if(input$normalizeCounts) "% of Female Cases" else "Female Cases")
+                                            midpoint = median(data$Count[data$Gender == "Female"]), 
+                                            name = if(input$normalizeCounts) "% of Female Cases" else "Female Cases")
     }
     
     male_data <- data %>% filter(Gender == "Male")
@@ -922,26 +909,26 @@ server = function(input, output, session) {
     
     if(input$showLabels) {
       male_labels <- geom_text(data = male_data, 
-                              aes(x = Condition, y = HealthFactor, 
-                                  label = if(input$normalizeCounts) 
-                                    sprintf("%.1f%%", Count) else 
-                                    as.character(Count)), 
-                              color = "black", size = 3.5)
+                               aes(x = Condition, y = HealthFactor, 
+                                   label = if(input$normalizeCounts) 
+                                     sprintf("%.1f%%", Count) else 
+                                       as.character(Count)), 
+                               color = "black", size = 3.5)
       
       female_labels <- geom_text(data = female_data, 
-                                aes(x = Condition, y = HealthFactor, 
-                                    label = if(input$normalizeCounts) 
-                                      sprintf("%.1f%%", Count) else 
-                                      as.character(Count)), 
-                                color = "black", size = 3.5)
+                                 aes(x = Condition, y = HealthFactor, 
+                                     label = if(input$normalizeCounts) 
+                                       sprintf("%.1f%%", Count) else 
+                                         as.character(Count)), 
+                                 color = "black", size = 3.5)
     } else {
       male_labels <- NULL
       female_labels <- NULL
     }
     
     title <- paste("Alzheimer's Cases by Gender and Health Conditions", 
-                 if (input$country != "All Countries") paste("in", input$country) else "")
-
+                   if (input$country != "All Countries") paste("in", input$country) else "")
+    
     subtitle <- if(input$normalizeCounts) {
       "Values shown as percentages within each gender group"
     } else {
@@ -953,8 +940,8 @@ server = function(input, output, session) {
                 aes(x = Condition, y = HealthFactor, fill = Count), 
                 color = "black") +
       geom_hline(yintercept = seq(1.5, length(unique(data$HealthFactor))-0.5, 1), 
-           color = "darkgrey", 
-           linewidth = .5) +
+                 color = "darkgrey", 
+                 linewidth = .5) +
       male_colors +
       male_labels +
       new_scale_fill() +
@@ -964,7 +951,7 @@ server = function(input, output, session) {
                 color = "black") +
       female_colors +
       female_labels +
-
+      
       facet_grid(. ~ Gender, scales = "free_x", space = "free_x") +
       
       labs(title = title,
@@ -989,10 +976,10 @@ server = function(input, output, session) {
         panel.border = element_rect(color = "white", fill = NA, size = .5)
       )
   })
-
-
+  
+  
   #—— 5) Pie Charts ———————————————————————————————————————————————————
-
+  
   filtered_pie = reactive({
     df = alz_df
     df = df |> filter(
@@ -1005,21 +992,21 @@ server = function(input, output, session) {
       df = df |> filter(Country == input$pie_countryFilter)
     df
   })
-
+  
   output$pie_chart = renderPlotly({
     var = input$pie_varChoice
     df = filtered_pie()
-
+    
     df_yes = df |> filter(`Alzheimer's Diagnosis`=="Yes") |>
       group_by(.data[[var]]) |>
       summarize(count = n(), .groups="drop") |>
       filter(!is.na(.data[[var]]))
-
+    
     df_no  = df |> filter(`Alzheimer's Diagnosis`=="No") |>
       group_by(.data[[var]]) |>
       summarize(count = n(), .groups="drop") |>
       filter(!is.na(.data[[var]]))
-
+    
     plot_ly() |>
       add_pie(data = df_yes,
               labels = ~get(var), values = ~count,
@@ -1036,12 +1023,9 @@ server = function(input, output, session) {
         template = "plotly_dark"
       )
   })
-
+  
 }
 
 #── RUN APP ─────────────────────────────────────────────────────────────────
 
 shinyApp(ui, server)
-
-```
-
